@@ -1,0 +1,88 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.trae/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Rust
+target/
+**/target/
+
+# Node
+node_modules/
+dist/
+
+# Temporary files
+tmp/
+*.tmp
+*.temp
+
+# Backup files
+*.bak
+backups/*.zip
+backups/archives/
+memory/backups/
+
+# Reports
+reports/
+
+# State files
+state/*.json
+integrity/*.json
+src/integrity/*.json
+
+# Local configuration
+*.local
+.env.local
+
+# Runtime state
+.sdk_state.json
+
+# Memory data (user content)
+memory/memory.db
+memory/faiss_index.bin
+src/memory/*.db

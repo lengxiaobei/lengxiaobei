@@ -1,0 +1,165 @@
+[
+  {
+    "type": "code_analysis",
+    "description": "分析代码结构和逻辑",
+    "score": 82.0,
+    "confidence": 76.19999999999999,
+    "last_assessed": 1778811759.694256,
+    "history": [
+      {
+        "timestamp": 1778779704.459403,
+        "old_score": 80.0,
+        "new_score": 81.0,
+        "delta": 1.0,
+        "reason": "evolution_success"
+      },
+      {
+        "timestamp": 1778779704.460316,
+        "old_score": 81.0,
+        "new_score": 80.5,
+        "delta": -0.5,
+        "reason": "evolution_failed"
+      },
+      {
+        "timestamp": 1778779734.9538538,
+        "old_score": 80.5,
+        "new_score": 81.5,
+        "delta": 1.0,
+        "reason": "evolution_success"
+      },
+      {
+        "timestamp": 1778779734.954793,
+        "old_score": 81.5,
+        "new_score": 81.0,
+        "delta": -0.5,
+        "reason": "evolution_failed"
+      },
+      {
+        "timestamp": 1778811759.6942568,
+        "old_score": 81.0,
+        "new_score": 82.0,
+        "delta": 1.0,
+        "reason": "evolution_success"
+      }
+    ],
+    "tags": []
+  },
+  {
+    "type": "code_generation",
+    "description": "生成高质量代码",
+    "score": 78.0,
+    "confidence": 71.5,
+    "last_assessed": 1778811759.694756,
+    "history": [
+      {
+        "timestamp": 1778779704.460052,
+        "old_score": 75.0,
+        "new_score": 76.0,
+        "delta": 1.0,
+        "reason": "evolution_success"
+      },
+      {
+        "timestamp": 1778779734.954338,
+        "old_score": 76.0,
+        "new_score": 77.0,
+        "delta": 1.0,
+        "reason": "evolution_success"
+      },
+      {
+        "timestamp": 1778811759.694756,
+        "old_score": 77.0,
+        "new_score": 78.0,
+        "delta": 1.0,
+        "reason": "evolution_success"
+      }
+    ],
+    "tags": []
+  },
+  {
+    "type": "architecture_optimization",
+    "description": "优化系统架构",
+    "score": 70.0,
+    "confidence": 65.0,
+    "last_assessed": 1775854434.7367308,
+    "history": [],
+    "tags": []
+  },
+  {
+    "type": "problem_solving",
+    "description": "解决复杂问题",
+    "score": 84.0,
+    "confidence": 79.69999999999999,
+    "last_assessed": 1778779734.955055,
+    "history": [
+      {
+        "timestamp": 1778779704.4605062,
+        "old_score": 85.0,
+        "new_score": 84.5,
+        "delta": -0.5,
+        "reason": "evolution_failed"
+      },
+      {
+        "timestamp": 1778779734.955055,
+        "old_score": 84.5,
+        "new_score": 84.0,
+        "delta": -0.5,
+        "reason": "evolution_failed"
+      }
+    ],
+    "tags": []
+  },
+  {
+    "type": "learning",
+    "description": "学习新技能和知识",
+    "score": 90.0,
+    "confidence": 85.0,
+    "last_assessed": 1775854434.7370691,
+    "history": [],
+    "tags": []
+  },
+  {
+    "type": "memory",
+    "description": "存储和检索信息",
+    "score": 75.0,
+    "confidence": 70.0,
+    "last_assessed": 1775854434.737243,
+    "history": [],
+    "tags": []
+  },
+  {
+    "type": "decision_making",
+    "description": "做出明智决策",
+    "score": 80.0,
+    "confidence": 75.0,
+    "last_assessed": 1775854434.737461,
+    "history": [],
+    "tags": []
+  },
+  {
+    "type": "communication",
+    "description": "与人类和其他系统沟通",
+    "score": 85.0,
+    "confidence": 80.0,
+    "last_assessed": 1775854434.737684,
+    "history": [],
+    "tags": []
+  },
+  {
+    "type": "exploration",
+    "description": "探索新领域和可能性",
+    "score": 75.0,
+    "confidence": 70.0,
+    "last_assessed": 1775854434.7380102,
+    "history": [],
+    "tags": []
+  },
+  {
+    "type": "creativity",
+    "description": "创造新的解决方案",
+    "score": 80.0,
+    "confidence": 75.0,
+    "last_assessed": 1775854434.738224,
+    "history": [],
+    "tags": []
+  }
+]

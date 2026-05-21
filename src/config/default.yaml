@@ -1,0 +1,45 @@
+app:
+  debug: false
+  host: localhost
+  name: Leng Xiaobei
+  port: 8080
+  version: 1.0.0
+async:
+  enabled: true
+  max_concurrency: 10
+cache:
+  enabled: true
+  size: 1000
+  ttl: 3600
+database:
+  path: ./data.db
+  timeout: 30
+  type: sqlite
+logging:
+  file: ./logs/app.log
+  level: INFO
+  rotation: daily
+security:
+  cors:
+    allowed_origins:
+    - '*'
+    enabled: true
+  secret_key: your-secret-key
+  token_expiry: 3600
+
+evolution:
+  llm_models:
+    - qwen3.5-plus
+    - deepseek-v3.2
+    - qwen3-coder-plus
+  team_roles:
+    - ["architect", "架构师", "你是一位资深软件架构师，擅长分析代码架构问题并提供专业建议。"]
+    - ["generator", "开发者", "你是一位经验丰富的软件开发者，擅长编写高质量代码和实施解决方案。"]
+    - ["critic", "批评者", "你是一位严谨的代码审查者，擅长发现代码中的问题和潜在风险。"]
+    - ["tester", "测试者", "你是一位专业的软件测试工程师，擅长设计测试用例和验证代码质量。"]
+  max_code_length: 10000
+  max_json_parse_attempts: 3
+  max_problems_to_show: 10
+  default_confidence: 0.7
+  autonomy_level: medium  # low=需要确认, medium=高风险沙箱, high=完全自主
+  auto_approve: true      # 非交互自主进化；仍受授权目录、宪法、熔断和测试回滚约束

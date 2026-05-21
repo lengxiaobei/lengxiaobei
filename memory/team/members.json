@@ -1,0 +1,57 @@
+[
+  {
+    "id": "42666f95-10b7-4e7e-9d1a-c168c14446d8",
+    "name": "Generator",
+    "email": "generator@dev.team",
+    "role": "member",
+    "joined_at": "2026-04-11T04:15:12.850081",
+    "last_active": "2026-04-11T04:15:12.850086",
+    "metadata": {
+      "dev_role": "generator"
+    }
+  },
+  {
+    "id": "02066d8e-64f2-4388-ae24-9c6e6810124c",
+    "name": "Critic",
+    "email": "critic@dev.team",
+    "role": "member",
+    "joined_at": "2026-04-11T04:15:12.850550",
+    "last_active": "2026-04-11T04:15:12.850551",
+    "metadata": {
+      "dev_role": "critic"
+    }
+  },
+  {
+    "id": "f36ebcff-c6ff-4355-bd38-cf2d84013b65",
+    "name": "Tester",
+    "email": "tester@dev.team",
+    "role": "member",
+    "joined_at": "2026-04-11T04:15:12.850933",
+    "last_active": "2026-04-11T04:15:12.850934",
+    "metadata": {
+      "dev_role": "tester"
+    }
+  },
+  {
+    "id": "5990fb45-2189-4092-8ab7-859fbacceb93",
+    "name": "Architect",
+    "email": "architect@dev.team",
+    "role": "member",
+    "joined_at": "2026-04-11T04:15:12.851289",
+    "last_active": "2026-04-11T04:15:12.851290",
+    "metadata": {
+      "dev_role": "architect"
+    }
+  },
+  {
+    "id": "eb8731d1-606d-4362-84e8-35492e0837bd",
+    "name": "ProjectManager",
+    "email": "pm@dev.team",
+    "role": "member",
+    "joined_at": "2026-04-11T04:15:12.851663",
+    "last_active": "2026-04-11T04:15:12.851664",
+    "metadata": {
+      "dev_role": "project_manager"
+    }
+  }
+]

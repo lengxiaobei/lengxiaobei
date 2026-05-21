@@ -1,0 +1,32 @@
+{
+  "project_root": ".",
+  "memory_dir": "./memory",
+  "autonomy_level": 80,
+  "llm": {
+    "api_key": "",
+    "model": "MiniMax-M2.7",
+    "base_url": "https://api.minimax.chat/v1"
+  },
+  "clawmem": {
+    "enabled": false
+  },
+  "log_level": "INFO",
+  "editor_mode": "normal",
+  "control_layer": {
+    "api_url": "http://localhost:8082/api/v1",
+    "port": 8082,
+    "timeout": 30
+  },
+  "memory_layer": {
+    "api_url": "http://localhost:8081/api",
+    "timeout": 30
+  },
+  "qdrant": {
+    "url": "http://192.168.31.138:6333",
+    "collection": "lengxiaobei_memory"
+  },
+  "sandbox": {
+    "enabled": true,
+    "timeout": 30
+  }
+}

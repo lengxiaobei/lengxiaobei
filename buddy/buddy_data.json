@@ -1,0 +1,19 @@
+{
+  "name": "兔子",
+  "personality": "勇敢",
+  "level": 1,
+  "experience": 0,
+  "mood": "happy",
+  "rarity": "common",
+  "species": "rabbit",
+  "eye": "sleepy",
+  "hat": "none",
+  "shiny": false,
+  "stats": {
+    "happiness": 39,
+    "energy": 4,
+    "curiosity": 39,
+    "friendship": 67,
+    "intelligence": 13
+  }
+}

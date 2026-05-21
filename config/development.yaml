@@ -1,0 +1,68 @@
+constitution:
+  enabled: true
+  files:
+  - SOUL.md
+  - IDENTITY.md
+  - USER.md
+  - CONSTITUTION.md
+evolution:
+  auto_commit: false
+  enabled: true
+  max_iterations: 10
+  timeout: 60
+logging:
+  backup_count: 5
+  level: DEBUG
+  log_dir: logs
+  max_bytes: 10485760
+mcp:
+  command:
+  - python3
+  - src/mcp_server.py
+  cwd: ${workspaceFolder}
+  enabled: true
+  env:
+    PYTHONPATH: ${workspaceFolder}
+memory:
+  enabled: true
+  max_size: 1000
+  retention_days: 30
+model:
+  default: claude-3-opus-20240229
+  fallback: claude-3-sonnet-20240229
+  max_tokens: 4096
+  temperature: 0.7
+monitoring:
+  alerts:
+    cpu_threshold: 80
+    disk_threshold: 90
+    memory_threshold: 85
+  enabled: true
+  interval: 30
+performance:
+  async_enabled: true
+  cache_enabled: true
+  cache_size: 100
+  max_workers: 4
+security:
+  allowed_origins:
+  - '*'
+  enable_cors: true
+  rate_limit:
+    enabled: false
+    max_requests: 100
+    window_seconds: 60
+server:
+  host: localhost
+  port: 8000
+  timeout: 30
+system:
+  debug: true
+  description: AI 驱动的自主编程助手
+  environment: development
+  name: 冷小北
+  version: 1.0.0
+tools:
+  enabled: true
+  max_retries: 3
+  timeout: 30

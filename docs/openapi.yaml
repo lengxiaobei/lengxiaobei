@@ -1,0 +1,332 @@
+openapi: 3.1.0
+info:
+  title: LengXiaobei API
+  description: |
+    数字生命体 - Self-evolving AI Agent
+
+    支持功能：
+    - 记忆存储与检索
+    - 自主代码进化
+    - KAIROS 守护系统
+    - 健康检查与监控
+  version: 1.0.0
+  contact:
+    name: LengXiaobei
+    url: https://github.com/lengxiaobei
+
+servers:
+  - url: http://localhost:8081
+    description: Memory Layer API
+  - url: http://localhost:8082
+    description: Control Layer API
+
+tags:
+  - name: Health
+    description: 健康检查
+  - name: Memory
+    description: 记忆系统
+  - name: Evolution
+    description: 自主进化
+  - name: Metrics
+    description: 监控指标
+  - name: Config
+    description: 配置管理
+
+paths:
+  /health:
+    get:
+      tags:
+        - Health
+      summary: 健康检查
+      description: 返回系统健康状态
+      responses:
+        '200':
+          description: 健康状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+  /metrics:
+    get:
+      tags:
+        - Metrics
+      summary: Prometheus 指标
+      description: 返回 Prometheus 格式的指标数据
+      responses:
+        '200':
+          description: 指标数据
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: |
+                  # TYPE lengxiaobei_system_cpu_usage gauge
+                  lengxiaobei_system_cpu_usage{host="lengxiaobei"} 45.2
+
+  /api/memory:
+    post:
+      tags:
+        - Memory
+      summary: 存储记忆
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemoryEntry'
+      responses:
+        '200':
+          description: 存储成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemoryResponse'
+
+    get:
+      tags:
+        - Memory
+      summary: 搜索记忆
+      parameters:
+        - name: query
+          in: query
+          required: true
+          schema:
+            type: string
+          description: 搜索关键词
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+          description: 返回数量限制
+      responses:
+        '200':
+          description: 记忆列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MemoryEntry'
+
+  /api/evolution/propose:
+    post:
+      tags:
+        - Evolution
+      summary: 提议代码改进
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EvolutionProposal'
+      responses:
+        '200':
+          description: 提议已创建
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvolutionResponse'
+
+  /api/evolution/approve:
+    post:
+      tags:
+        - Evolution
+      summary: 审批进化提议
+      parameters:
+        - name: proposal_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 审批结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvolutionResponse'
+
+  /api/evolution/status:
+    get:
+      tags:
+        - Evolution
+      summary: 获取进化状态
+      responses:
+        '200':
+          description: 进化状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvolutionStatus'
+
+  /api/config:
+    get:
+      tags:
+        - Config
+      summary: 获取配置
+      responses:
+        '200':
+          description: 当前配置
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Config'
+
+    put:
+      tags:
+        - Config
+      summary: 更新配置
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Config'
+      responses:
+        '200':
+          description: 配置已更新
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy, degraded]
+          example: healthy
+        timestamp:
+          type: number
+          example: 1716000000.123
+        components:
+          type: object
+          properties:
+            core:
+              $ref: '#/components/schemas/ComponentHealth'
+            memory:
+              $ref: '#/components/schemas/ComponentHealth'
+            llm:
+              $ref: '#/components/schemas/ComponentHealth'
+            circuit_breaker:
+              $ref: '#/components/schemas/ComponentHealth'
+
+    ComponentHealth:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy]
+        last_check:
+          type: number
+        message:
+          type: string
+
+    MemoryEntry:
+      type: object
+      required:
+        - content
+        - type
+      properties:
+        id:
+          type: string
+          format: uuid
+        content:
+          type: string
+          description: 记忆内容
+        type:
+          type: string
+          enum: [context, skill, fact, experience]
+          description: 记忆类型
+        name:
+          type: string
+          description: 记忆名称（可选）
+        description:
+          type: string
+          description: 记忆描述（可选）
+        created_at:
+          type: number
+          description: 创建时间戳
+
+    MemoryResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        id:
+          type: string
+          format: uuid
+        message:
+          type: string
+
+    EvolutionProposal:
+      type: object
+      required:
+        - file_path
+        - issue
+        - suggested_fix
+      properties:
+        file_path:
+          type: string
+          description: 目标文件路径
+        issue:
+          type: string
+          description: 问题描述
+        suggested_fix:
+          type: string
+          description: 建议的修复方案
+        rationale:
+          type: string
+          description: 修复理由
+        priority:
+          type: string
+          enum: [low, medium, high, critical]
+          default: medium
+
+    EvolutionResponse:
+      type: object
+      properties:
+        proposal_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, approved, rejected, applied]
+        message:
+          type: string
+
+    EvolutionStatus:
+      type: object
+      properties:
+        is_active:
+          type: boolean
+        last_evolution:
+          type: number
+        pending_improvements:
+          type: integer
+        total_evolutions:
+          type: integer
+        success_rate:
+          type: number
+          format: float
+
+    Config:
+      type: object
+      properties:
+        autonomy_level:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: 自主度 (0-100)
+        log_level:
+          type: string
+          enum: [DEBUG, INFO, WARNING, ERROR]
+        llm_model:
+          type: string
+        llm_api_key:
+          type: string
+          description: 仅在需要时提供
+        llm_base_url:
+          type: string
+          format: uri

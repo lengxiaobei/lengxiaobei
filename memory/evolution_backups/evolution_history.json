@@ -1,0 +1,730 @@
+[
+  {
+    "id": "evo_1775754859",
+    "title": "自主进化 - 3项改进",
+    "description": "代码执行存在安全风险，直接写入和执行用户提供的代码可能导致任意代码执行\n用户输入直接传递给工具函数执行，存在注入风险\n命令注入漏洞 - 直接使用字符串替换来处理上下文变量可能导致恶意命令执行",
+    "success": true,
+    "backup_paths": [
+      "/Users/panhao/projects/lengxiaobei/memory/backups/sandbox_environment_20260410_011419_7a3f92dd.bak",
+      "/Users/panhao/projects/lengxiaobei/memory/backups/query_engine_20260410_011419_11b104c8.bak",
+      "/Users/panhao/projects/lengxiaobei/memory/backups/hooks_20260410_011419_71bd2716.bak"
+    ],
+    "timestamp": 1775754872.4685109,
+    "risk_level": "medium",
+    "changes": [
+      {
+        "file": "src/sandbox_environment.py",
+        "type": "security",
+        "description": "代码执行存在安全风险，直接写入和执行用户提供的代码可能导致任意代码执行"
+      },
+      {
+        "file": "src/query_engine.py",
+        "type": "security",
+        "description": "用户输入直接传递给工具函数执行，存在注入风险"
+      },
+      {
+        "file": "src/hooks.py",
+        "type": "security",
+        "description": "命令注入漏洞 - 直接使用字符串替换来处理上下文变量可能导致恶意命令执行"
+      }
+    ]
+  },
+  {
+    "id": "evo_1775755688",
+    "title": "自主进化 - 2项改进",
+    "description": "verification_phase接受implementation_result参数但实际传入的是Task对象\nsafe_execute_tool函数没有真正的沙箱机制，可能导致任意代码执行",
+    "success": true,
+    "backup_paths": [
+      "/Users/panhao/projects/lengxiaobei/memory/backups/coordinator_20260410_012808_62555568.bak",
+      "/Users/panhao/projects/lengxiaobei/memory/backups/query_engine_20260410_012808_11b104c8.bak"
+    ],
+    "timestamp": 1775755700.321271,
+    "risk_level": "medium",
+    "changes": [
+      {
+        "file": "src/coordinator.py",
+        "type": "bug",
+        "description": "verification_phase接受implementation_result参数但实际传入的是Task对象"
+      },
+      {
+        "file": "src/query_engine.py",
+        "type": "security",
+        "description": "safe_execute_tool函数没有真正的沙箱机制，可能导致任意代码执行"
+      }
+    ]
+  },
+  {
+    "id": "evo_1775764384",
+    "title": "自主进化 - 3项改进",
+    "description": "时间比较逻辑错误，使用了错误的时间戳进行比较\n重复获取锁可能导致竞态条件\n类职责过重，违反单一职责原则",
+    "success": true,
+    "backup_paths": [
+      "/Users/panhao/projects/lengxiaobei/memory/backups/auto_dream_20260410_035304_8c6bae9b.bak",
+      "/Users/panhao/projects/lengxiaobei/memory/backups/auto_dream_20260410_035304_8c6bae9b.bak",
+      "/Users/panhao/projects/lengxiaobei/memory/backups/auto_dream_20260410_035304_8c6bae9b.bak"
+    ],
+    "timestamp": 1775764416.323945,
+    "risk_level": "medium",
+    "changes": [
+      {
+        "file": "src/auto_dream.py",
+        "type": "bug",
+        "description": "时间比较逻辑错误，使用了错误的时间戳进行比较"
+      },
+      {
+        "file": "src/auto_dream.py",
+        "type": "bug",
+        "description": "重复获取锁可能导致竞态条件"
+      },
+      {
+        "file": "src/auto_dream.py",
+        "type": "architecture",
+        "description": "类职责过重，违反单一职责原则"
+      }
+    ]
+  },
+  {
+    "id": "evo_1775764929",
+    "title": "自主进化 - 3项改进",
+    "description": "create_selector函数中使用了未定义的List类型\n每次更新状态时都创建新的AppState对象，内存开销大\nAppState的get方法没有正确处理嵌套字典的键访问",
+    "success": true,
+    "backup_paths": [
+      "/Users/panhao/projects/lengxiaobei/memory/backups/state_20260410_040209_93f95ff7.bak",
+      "/Users/panhao/projects/lengxiaobei/memory/backups/state_20260410_040209_93f95ff7.bak",
+      "/Users/panhao/projects/lengxiaobei/memory/backups/state_20260410_040209_93f95ff7.bak"
+    ],
+    "timestamp": 1775764962.295823,
+    "risk_level": "medium",
+    "changes": [
+      {
+        "file": "src/state.py",
+        "type": "bug",
+        "description": "create_selector函数中使用了未定义的List类型"
+      },
+      {
+        "file": "src/state.py",
+        "type": "performance",
+        "description": "每次更新状态时都创建新的AppState对象，内存开销大"
+      },
+      {
+        "file": "src/state.py",
+        "type": "bug",
+        "description": "AppState的get方法没有正确处理嵌套字典的键访问"
+      }
+    ]
+  },
+  {
+    "id": "evo_1775765599",
+    "title": "自主进化 - 3项改进",
+    "description": "MCPClient类承担了过多职责，违反单一职责原则\n_send_stdio方法中没有对进程状态进行充分检查，可能导致空指针异常\n_send_stdio方法中没有错误处理，如果子进程崩溃会导致异常",
+    "success": true,
+    "backup_paths": [
+      "/Users/panhao/projects/lengxiaobei/memory/backups/mcp_20260410_041319_0c3389b2.bak",
+      "/Users/panhao/projects/lengxiaobei/memory/backups/mcp_20260410_041319_0c3389b2.bak",
+      "/Users/panhao/projects/lengxiaobei/memory/backups/mcp_20260410_041319_0c3389b2.bak"
+    ],
+    "timestamp": 1775765631.8862562,
+    "risk_level": "medium",
+    "changes": [
+      {
+        "file": "src/mcp.py",
+        "type": "architecture",
+        "description": "MCPClient类承担了过多职责，违反单一职责原则"
+      },
+      {
+        "file": "src/mcp.py",
+        "type": "bug",
+        "description": "_send_stdio方法中没有对进程状态进行充分检查，可能导致空指针异常"
+      },
+      {
+        "file": "src/mcp.py",
+        "type": "bug",
+        "description": "_send_stdio方法中没有错误处理，如果子进程崩溃会导致异常"
+      }
+    ]
+  },
+  {
+    "id": "evo_1775766756",
+    "title": "自主进化 - 3项改进",
+    "description": "直接使用os.listdir()可能受到路径遍历攻击\nJSON解析没有适当的错误处理\nLoadedPlugin类构造函数参数过多，难以维护",
+    "success": true,
+    "backup_paths": [
+      "/Users/panhao/projects/lengxiaobei/memory/backups/plugin_20260410_043236_48d83e1a.bak",
+      "/Users/panhao/projects/lengxiaobei/memory/backups/plugin_20260410_043236_48d83e1a.bak",
+      "/Users/panhao/projects/lengxiaobei/memory/backups/plugin_20260410_043236_48d83e1a.bak"
+    ],
+    "timestamp": 1775766785.2196019,
+    "risk_level": "medium",
+    "changes": [
+      {
+        "file": "src/plugin.py",
+        "type": "security",
+        "description": "直接使用os.listdir()可能受到路径遍历攻击"
+      },
+      {
+        "file": "src/plugin.py",
+        "type": "bug",
+        "description": "JSON解析没有适当的错误处理"
+      },
+      {
+        "file": "src/plugin.py",
+        "type": "readability",
+        "description": "LoadedPlugin类构造函数参数过多，难以维护"
+      }
+    ]
+  },
+  {
+    "id": "evo_1775767426",
+    "title": "自主进化 - 3项改进",
+    "description": "MCPClient类承担了过多职责，违反单一职责原则\nStdio通信中可能存在竞态条件，没有同步机制保护进程状态检查\nStdio通信中没有设置超时，可能导致无限等待",
+    "success": true,
+    "backup_paths": [
+      "/Users/panhao/projects/lengxiaobei/memory/backups/mcp_20260410_044346_0c3389b2.bak",
+      "/Users/panhao/projects/lengxiaobei/memory/backups/mcp_20260410_044346_0c3389b2.bak",
+      "/Users/panhao/projects/lengxiaobei/memory/backups/mcp_20260410_044346_0c3389b2.bak"
+    ],
+    "timestamp": 1775767455.3474529,
+    "risk_level": "medium",
+    "changes": [
+      {
+        "file": "src/mcp.py",
+        "type": "architecture",
+        "description": "MCPClient类承担了过多职责，违反单一职责原则"
+      },
+      {
+        "file": "src/mcp.py",
+        "type": "bug",
+        "description": "Stdio通信中可能存在竞态条件，没有同步机制保护进程状态检查"
+      },
+      {
+        "file": "src/mcp.py",
+        "type": "bug",
+        "description": "Stdio通信中没有设置超时，可能导致无限等待"
+      }
+    ]
+  },
+  {
+    "id": "evo_1775767652",
+    "title": "自主进化 - 2项改进",
+    "description": "代码复杂度高: src/bridge.py (63)\n代码复杂度高: src/remote_control.py (67)",
+    "success": true,
+    "backup_paths": [
+      "/Users/panhao/projects/lengxiaobei/memory/backups/bridge_20260410_044732_ede3465c.bak",
+      "/Users/panhao/projects/lengxiaobei/memory/backups/remote_control_20260410_044732_83d6ddb2.bak"
+    ],
+    "timestamp": 1775767682.799126,
+    "risk_level": "low",
+    "changes": [
+      {
+        "file": "src/bridge.py",
+        "type": "code",
+        "description": "代码复杂度高: src/bridge.py (63)"
+      },
+      {
+        "file": "src/remote_control.py",
+        "type": "code",
+        "description": "代码复杂度高: src/remote_control.py (67)"
+      }
+    ]
+  },
+  {
+    "id": "evo_1775768309",
+    "title": "自主进化 - 1项改进",
+    "description": "代码复杂度高: src/remote_control.py (67)",
+    "success": true,
+    "backup_paths": [
+      "/Users/panhao/projects/lengxiaobei/memory/backups/remote_control_20260410_045829_83d6ddb2.bak"
+    ],
+    "timestamp": 1775768340.606534,
+    "risk_level": "low",
+    "changes": [
+      {
+        "file": "src/remote_control.py",
+        "type": "code",
+        "description": "代码复杂度高: src/remote_control.py (67)"
+      }
+    ]
+  },
+  {
+    "id": "evo_1775770700",
+    "title": "自主进化 - 2项改进",
+    "description": "代码复杂度高: src/bridge.py (79)\n代码复杂度高: src/remote_control.py (67)",
+    "success": true,
+    "backup_paths": [
+      "/Users/panhao/projects/lengxiaobei/memory/backups/bridge_20260410_053820_ede3465c.bak",
+      "/Users/panhao/projects/lengxiaobei/memory/backups/remote_control_20260410_053820_83d6ddb2.bak"
+    ],
+    "timestamp": 1775770727.569261,
+    "risk_level": "low",
+    "changes": [
+      {
+        "file": "src/bridge.py",
+        "type": "code",
+        "description": "代码复杂度高: src/bridge.py (79)"
+      },
+      {
+        "file": "src/remote_control.py",
+        "type": "code",
+        "description": "代码复杂度高: src/remote_control.py (67)"
+      }
+    ]
+  },
+  {
+    "id": "evo_1775778604",
+    "title": "自主进化 - 1项改进",
+    "description": "代码复杂度高: src/mcp.py (66)",
+    "success": true,
+    "backup_paths": [
+      "/Users/panhao/projects/lengxiaobei/memory/backups/mcp_20260410_075004_0c3389b2.bak"
+    ],
+    "timestamp": 1775778637.9135602,
+    "risk_level": "low",
+    "changes": [
+      {
+        "file": "src/mcp.py",
+        "type": "code",
+        "description": "代码复杂度高: src/mcp.py (66)"
+      }
+    ]
+  },
+  {
+    "id": "evo_1775788888",
+    "title": "自主进化 - 1项改进",
+    "description": "代码复杂度高: src/remote_control.py (80)",
+    "success": true,
+    "backup_paths": [
+      "/Users/panhao/projects/lengxiaobei/memory/backups/remote_control_20260410_104128_83d6ddb2.bak"
+    ],
+    "timestamp": 1775788918.2823691,
+    "risk_level": "low",
+    "changes": [
+      {
+        "file": "src/remote_control.py",
+        "type": "code",
+        "description": "代码复杂度高: src/remote_control.py (80)"
+      }
+    ]
+  },
+  {
+    "id": "evo_1775797390",
+    "title": "自主进化 - 1项改进",
+    "description": "代码复杂度高: src/remote_control.py (81)",
+    "success": true,
+    "backup_paths": [
+      "/Users/panhao/projects/lengxiaobei/memory/backups/remote_control_20260410_130310_83d6ddb2.bak"
+    ],
+    "timestamp": 1775797427.215782,
+    "risk_level": "low",
+    "changes": [
+      {
+        "file": "src/remote_control.py",
+        "type": "code",
+        "description": "代码复杂度高: src/remote_control.py (81)"
+      }
+    ]
+  },
+  {
+    "id": "evo_1775818272",
+    "title": "自主进化 - 3项改进",
+    "description": "文件过大，包含过多职责，违反单一职责原则\nStdioTransportHandler.send方法过长且逻辑复杂\nMCPConnectionManager类承担了过多职责",
+    "success": true,
+    "backup_paths": [
+      "/Users/panhao/projects/lengxiaobei/memory/backups/mcp_20260410_185112_0c3389b2.bak",
+      "/Users/panhao/projects/lengxiaobei/memory/backups/mcp_20260410_185112_0c3389b2.bak",
+      "/Users/panhao/projects/lengxiaobei/memory/backups/mcp_20260410_185112_0c3389b2.bak"
+    ],
+    "timestamp": 1775818284.395854,
+    "risk_level": "medium",
+    "changes": [
+      {
+        "file": "src/mcp.py",
+        "type": "complexity",
+        "description": "文件过大，包含过多职责，违反单一职责原则"
+      },
+      {
+        "file": "src/mcp.py",
+        "type": "readability",
+        "description": "StdioTransportHandler.send方法过长且逻辑复杂"
+      },
+      {
+        "file": "src/mcp.py",
+        "type": "architecture",
+        "description": "MCPConnectionManager类承担了过多职责"
+      }
+    ]
+  },
+  {
+    "timestamp": 1775854484.143718,
+    "proposal_id": "evo_1775854484",
+    "success": true,
+    "changes": [
+      {
+        "file_path": "src/bridge.py",
+        "change_type": "code",
+        "description": "代码复杂度高: src/bridge.py (69)"
+      },
+      {
+        "file_path": "src/core.py",
+        "change_type": "code",
+        "description": "代码复杂度高: src/core.py (77)"
+      },
+      {
+        "file_path": "src/auto_evolution.py",
+        "change_type": "code",
+        "description": "代码复杂度高: src/auto_evolution.py (63)"
+      }
+    ],
+    "errors": [],
+    "pre_analysis": {
+      "files": {
+        "src/bridge.py": {
+          "complexity": 365,
+          "lines": 453,
+          "functions": 38,
+          "classes": 8
+        },
+        "src/core.py": {
+          "complexity": 3751,
+          "lines": 2477,
+          "functions": 72,
+          "classes": 2
+        },
+        "src/auto_evolution.py": {
+          "complexity": 3021,
+          "lines": 2487,
+          "functions": 45,
+          "classes": 6
+        }
+      },
+      "total_complexity": 7137
+    },
+    "post_analysis": {
+      "files": {
+        "src/bridge.py": {
+          "complexity": 295,
+          "lines": 225,
+          "functions": 17,
+          "classes": 9
+        },
+        "src/core.py": {
+          "complexity": 137,
+          "lines": 242,
+          "functions": 3,
+          "classes": 1
+        },
+        "src/auto_evolution.py": {
+          "complexity": 64,
+          "lines": 184,
+          "functions": 2,
+          "classes": 6
+        }
+      },
+      "total_complexity": 496
+    },
+    "feedback": {
+      "complexity_change": {
+        "src/bridge.py": 70,
+        "src/core.py": 3614,
+        "src/auto_evolution.py": 2957
+      },
+      "lines_change": {
+        "src/bridge.py": 228,
+        "src/core.py": 2235,
+        "src/auto_evolution.py": 2303
+      },
+      "functions_change": {
+        "src/bridge.py": -21,
+        "src/core.py": -69,
+        "src/auto_evolution.py": -43
+      },
+      "classes_change": {
+        "src/bridge.py": 1,
+        "src/core.py": -1,
+        "src/auto_evolution.py": 0
+      },
+      "overall_improvement": 4586.2
+    }
+  },
+  {
+    "timestamp": 1775855133.1595259,
+    "proposal_id": "evo_1775855133",
+    "success": false,
+    "changes": [
+      {
+        "file_path": "src/bridge.py",
+        "change_type": "code",
+        "description": "代码复杂度高: src/bridge.py (69)"
+      },
+      {
+        "file_path": "src/core.py",
+        "change_type": "code",
+        "description": "代码复杂度高: src/core.py (77)"
+      },
+      {
+        "file_path": "src/auto_evolution.py",
+        "change_type": "code",
+        "description": "代码复杂度高: src/auto_evolution.py (63)"
+      }
+    ],
+    "errors": [
+      "复杂度未降低: -13"
+    ],
+    "pre_analysis": {
+      "files": {
+        "src/bridge.py": {
+          "complexity": 174,
+          "lines": 154,
+          "functions": 9,
+          "classes": 6
+        },
+        "src/core.py": {
+          "complexity": 137,
+          "lines": 242,
+          "functions": 3,
+          "classes": 1
+        },
+        "src/auto_evolution.py": {
+          "complexity": 66,
+          "lines": 188,
+          "functions": 3,
+          "classes": 6
+        }
+      },
+      "total_complexity": 377
+    },
+    "post_analysis": {
+      "files": {
+        "src/bridge.py": {
+          "complexity": 172,
+          "lines": 154,
+          "functions": 9,
+          "classes": 6
+        },
+        "src/core.py": {
+          "complexity": 63,
+          "lines": 214,
+          "functions": 2,
+          "classes": 1
+        },
+        "src/auto_evolution.py": {
+          "complexity": 155,
+          "lines": 262,
+          "functions": 15,
+          "classes": 6
+        }
+      },
+      "total_complexity": 390
+    },
+    "feedback": {
+      "complexity_change": {
+        "src/bridge.py": 2,
+        "src/core.py": 74,
+        "src/auto_evolution.py": -89
+      },
+      "lines_change": {
+        "src/bridge.py": 0,
+        "src/core.py": 28,
+        "src/auto_evolution.py": -74
+      },
+      "functions_change": {
+        "src/bridge.py": 0,
+        "src/core.py": -1,
+        "src/auto_evolution.py": 12
+      },
+      "classes_change": {
+        "src/bridge.py": 0,
+        "src/core.py": 0,
+        "src/auto_evolution.py": 0
+      },
+      "overall_improvement": 71.60000000000001
+    }
+  },
+  {
+    "timestamp": 1775855938.088479,
+    "proposal_id": "evo_1775855938",
+    "success": false,
+    "changes": [
+      {
+        "file_path": "src/bridge.py",
+        "change_type": "code",
+        "description": "代码复杂度高: src/bridge.py (69)"
+      },
+      {
+        "file_path": "src/core.py",
+        "change_type": "code",
+        "description": "代码复杂度高: src/core.py (77)"
+      },
+      {
+        "file_path": "src/auto_evolution.py",
+        "change_type": "code",
+        "description": "代码复杂度高: src/auto_evolution.py (63)"
+      }
+    ],
+    "errors": [
+      "复杂度未降低: -508"
+    ],
+    "pre_analysis": {
+      "files": {
+        "src/bridge.py": {
+          "complexity": 66,
+          "lines": 188,
+          "functions": 3,
+          "classes": 6
+        },
+        "src/core.py": {
+          "complexity": 66,
+          "lines": 188,
+          "functions": 3,
+          "classes": 6
+        },
+        "src/auto_evolution.py": {
+          "complexity": 66,
+          "lines": 188,
+          "functions": 3,
+          "classes": 6
+        }
+      },
+      "total_complexity": 198
+    },
+    "post_analysis": {
+      "files": {
+        "src/bridge.py": {
+          "complexity": 237,
+          "lines": 324,
+          "functions": 31,
+          "classes": 6
+        },
+        "src/core.py": {
+          "complexity": 182,
+          "lines": 231,
+          "functions": 13,
+          "classes": 6
+        },
+        "src/auto_evolution.py": {
+          "complexity": 287,
+          "lines": 281,
+          "functions": 21,
+          "classes": 9
+        }
+      },
+      "total_complexity": 706
+    },
+    "feedback": {
+      "complexity_change": {
+        "src/bridge.py": -171,
+        "src/core.py": -116,
+        "src/auto_evolution.py": -221
+      },
+      "lines_change": {
+        "src/bridge.py": -136,
+        "src/core.py": -43,
+        "src/auto_evolution.py": -93
+      },
+      "functions_change": {
+        "src/bridge.py": 28,
+        "src/core.py": 10,
+        "src/auto_evolution.py": 18
+      },
+      "classes_change": {
+        "src/bridge.py": 0,
+        "src/core.py": 0,
+        "src/auto_evolution.py": 3
+      },
+      "overall_improvement": 93.33333333333333
+    }
+  },
+  {
+    "timestamp": 1775856487.479371,
+    "proposal_id": "evo_1775856487",
+    "success": false,
+    "changes": [
+      {
+        "file_path": "src/bridge.py",
+        "change_type": "code",
+        "description": "代码复杂度高: src/bridge.py (69)"
+      },
+      {
+        "file_path": "src/core.py",
+        "change_type": "code",
+        "description": "代码复杂度高: src/core.py (77)"
+      },
+      {
+        "file_path": "src/auto_evolution.py",
+        "change_type": "code",
+        "description": "代码复杂度高: src/auto_evolution.py (63)"
+      }
+    ],
+    "errors": [
+      "复杂度未降低: -228"
+    ],
+    "pre_analysis": {
+      "files": {
+        "src/bridge.py": {
+          "complexity": 66,
+          "lines": 188,
+          "functions": 3,
+          "classes": 6
+        },
+        "src/core.py": {
+          "complexity": 66,
+          "lines": 188,
+          "functions": 3,
+          "classes": 6
+        },
+        "src/auto_evolution.py": {
+          "complexity": 66,
+          "lines": 188,
+          "functions": 3,
+          "classes": 6
+        }
+      },
+      "total_complexity": 198
+    },
+    "post_analysis": {
+      "files": {
+        "src/bridge.py": {
+          "complexity": 176,
+          "lines": 277,
+          "functions": 24,
+          "classes": 6
+        },
+        "src/core.py": {
+          "complexity": 119,
+          "lines": 219,
+          "functions": 13,
+          "classes": 13
+        },
+        "src/auto_evolution.py": {
+          "complexity": 131,
+          "lines": 240,
+          "functions": 21,
+          "classes": 6
+        }
+      },
+      "total_complexity": 426
+    },
+    "feedback": {
+      "complexity_change": {
+        "src/bridge.py": -110,
+        "src/core.py": -53,
+        "src/auto_evolution.py": -65
+      },
+      "lines_change": {
+        "src/bridge.py": -89,
+        "src/core.py": -31,
+        "src/auto_evolution.py": -52
+      },
+      "functions_change": {
+        "src/bridge.py": 21,
+        "src/core.py": 10,
+        "src/auto_evolution.py": 18
+      },
+      "classes_change": {
+        "src/bridge.py": 0,
+        "src/core.py": 7,
+        "src/auto_evolution.py": 0
+      },
+      "overall_improvement": 81.66666666666667
+    }
+  }
+]

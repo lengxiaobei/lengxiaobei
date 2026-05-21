@@ -1,0 +1,90 @@
+# 冷小北默认配置
+
+# 系统配置
+system:
+  name: "冷小北"
+  version: "1.0.0"
+  description: "AI 驱动的自主编程助手"
+  environment: "development"
+  debug: true
+
+# 服务器配置
+server:
+  host: "localhost"
+  port: 8000
+  timeout: 30
+
+# MCP 服务器配置
+mcp:
+  enabled: true
+  command: ["python3", "src/mcp_server.py"]
+  cwd: "${workspaceFolder}"
+  env:
+    PYTHONPATH: "${workspaceFolder}"
+
+# 进化引擎配置
+evolution:
+  enabled: true
+  max_iterations: 10
+  timeout: 60
+  auto_commit: false
+
+# 日志配置
+logging:
+  level: "INFO"
+  log_dir: "logs"
+  max_bytes: 10485760  # 10MB
+  backup_count: 5
+
+# 监控配置
+monitoring:
+  enabled: true
+  interval: 60  # 秒
+  alerts:
+    cpu_threshold: 80
+    memory_threshold: 85
+    disk_threshold: 90
+
+# 性能配置
+performance:
+  cache_enabled: true
+  cache_size: 100
+  async_enabled: true
+  max_workers: 4
+
+# 安全配置
+security:
+  enable_cors: true
+  allowed_origins: ["*"]
+  rate_limit:
+    enabled: false
+    max_requests: 100
+    window_seconds: 60
+
+# 模型配置
+model:
+  default: "claude-3-opus-20240229"
+  fallback: "claude-3-sonnet-20240229"
+  temperature: 0.7
+  max_tokens: 4096
+
+# 工具配置
+tools:
+  enabled: true
+  timeout: 30
+  max_retries: 3
+
+# 记忆配置
+memory:
+  enabled: true
+  max_size: 1000
+  retention_days: 30
+
+# 宪法配置
+constitution:
+  enabled: true
+  files:
+    - "SOUL.md"
+    - "IDENTITY.md"
+    - "USER.md"
+    - "CONSTITUTION.md"

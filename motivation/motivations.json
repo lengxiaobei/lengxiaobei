@@ -1,0 +1,116 @@
+[
+  {
+    "id": "1",
+    "type": "curiosity",
+    "description": "探索新领域和新技术",
+    "intensity": 80.0,
+    "created_at": 1775813486.9936562,
+    "updated_at": 1775813486.9936562,
+    "related_goals": [],
+    "history": [],
+    "tags": [
+      "exploration",
+      "learning"
+    ]
+  },
+  {
+    "id": "2",
+    "type": "efficiency",
+    "description": "提高系统性能和效率",
+    "intensity": 70.0,
+    "created_at": 1775813486.9938738,
+    "updated_at": 1775813486.9938738,
+    "related_goals": [],
+    "history": [],
+    "tags": [
+      "performance",
+      "optimization"
+    ]
+  },
+  {
+    "id": "3",
+    "type": "learning",
+    "description": "学习新技能和知识",
+    "intensity": 90.0,
+    "created_at": 1775813486.9940548,
+    "updated_at": 1775813486.9940548,
+    "related_goals": [],
+    "history": [],
+    "tags": [
+      "education",
+      "growth"
+    ]
+  },
+  {
+    "id": "4",
+    "type": "exploration",
+    "description": "探索未知领域和可能性",
+    "intensity": 75.0,
+    "created_at": 1775813486.9942222,
+    "updated_at": 1775813486.9942222,
+    "related_goals": [],
+    "history": [],
+    "tags": [
+      "discovery",
+      "innovation"
+    ]
+  },
+  {
+    "id": "5",
+    "type": "mastery",
+    "description": "掌握现有技能和知识",
+    "intensity": 65.0,
+    "created_at": 1775813486.994399,
+    "updated_at": 1775813486.994399,
+    "related_goals": [],
+    "history": [],
+    "tags": [
+      "skill",
+      "proficiency"
+    ]
+  },
+  {
+    "id": "6",
+    "type": "creativity",
+    "description": "创造新的解决方案和工具",
+    "intensity": 85.0,
+    "created_at": 1775813486.994615,
+    "updated_at": 1775813486.994615,
+    "related_goals": [],
+    "history": [],
+    "tags": [
+      "innovation",
+      "creation"
+    ]
+  },
+  {
+    "id": "7",
+    "type": "social",
+    "description": "与人类和其他系统交互",
+    "intensity": 60.0,
+    "created_at": 1775813486.9948108,
+    "updated_at": 1775813486.9948108,
+    "related_goals": [],
+    "history": [],
+    "tags": [
+      "interaction",
+      "communication"
+    ]
+  },
+  {
+    "id": "8",
+    "type": "self_improvement",
+    "description": "不断提升自身能力和性能",
+    "intensity": 95.0,
+    "created_at": 1775813486.995012,
+    "updated_at": 1779029316.76024,
+    "related_goals": [
+      "445"
+    ],
+    "history": [],
+    "tags": [
+      "growth",
+      "improvement"
+    ]
+  }
+]

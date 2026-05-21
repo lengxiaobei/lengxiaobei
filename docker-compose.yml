@@ -1,0 +1,111 @@
+# =============================================================================
+# LengXiaobei Docker Compose — Full Stack
+# =============================================================================
+services:
+  # Main agent service
+  lengxiaobei:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lengxiaobei
+    restart: unless-stopped
+    ports:
+      - "8080:8080"   # Web interface
+      - "8081:8081"   # Memory layer API
+      - "8082:8082"   # Control layer API
+    environment:
+      - LENGXIAOBEI_ROOT=/app
+      - LOG_LEVEL=INFO
+      - AUTONOMY_LEVEL=80
+      # LLM Configuration
+      - LLM_MODEL=MiniMax-M2.7
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - LLM_BASE_URL=${LLM_BASE_URL:-https://api.minimax.chat/v1}
+      # External services
+      - QDRANT_URL=http://qdrant:6333
+      - QDRANT_COLLECTION=lengxiaobei_memory
+    volumes:
+      # Persist memory and state
+      - lengxiaobei_memory:/app/memory
+      - lengxiaobei_logs:/app/logs
+      - lengxiaobei_state:/app/state
+      # Mount config for development
+      - ./config:/app/config:ro
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    networks:
+      - lengxiaobei-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Vector database for memory
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: lengxiaobei-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"   # Qdrant API
+      - "6334:6334"   # Qdrant gRPC
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - lengxiaobei-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Prometheus for metrics
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: lengxiaobei-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+    networks:
+      - lengxiaobei-net
+    depends_on:
+      - lengxiaobei
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: lengxiaobei-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:?Set GRAFANA_PASSWORD before starting Grafana}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - lengxiaobei-net
+    depends_on:
+      - prometheus
+
+volumes:
+  lengxiaobei_memory:
+  lengxiaobei_logs:
+  lengxiaobei_state:
+  qdrant_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  lengxiaobei-net:
+    driver: bridge
