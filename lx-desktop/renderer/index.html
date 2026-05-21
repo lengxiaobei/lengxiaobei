@@ -3,220 +3,108 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>冷小北</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      background-color: #f5f5f5;
-    }
-    .container {
-      height: 100vh;
-      display: flex;
-      flex-direction: column;
-    }
-    .header {
-      background-color: #2c3e50;
-      color: white;
-      padding: 1rem;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    .content {
-      flex: 1;
-      display: flex;
-      overflow: hidden;
-    }
-    .sidebar {
-      width: 250px;
-      background-color: #34495e;
-      color: white;
-      padding: 1rem;
-      overflow-y: auto;
-    }
-    .main {
-      flex: 1;
-      padding: 1rem;
-      overflow-y: auto;
-    }
-    .nav-item {
-      padding: 0.5rem;
-      cursor: pointer;
-      border-radius: 4px;
-      margin-bottom: 0.5rem;
-    }
-    .nav-item:hover {
-      background-color: #2c3e50;
-    }
-    .nav-item.active {
-      background-color: #1abc9c;
-    }
-    .chat-container {
-      height: 400px;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      padding: 1rem;
-      overflow-y: auto;
-      background-color: white;
-      margin-bottom: 1rem;
-    }
-    .message {
-      margin-bottom: 1rem;
-      padding: 0.5rem;
-      border-radius: 4px;
-    }
-    .user-message {
-      background-color: #e3f2fd;
-      align-self: flex-end;
-      margin-left: 20%;
-    }
-    .bot-message {
-      background-color: #f1f1f1;
-      align-self: flex-start;
-      margin-right: 20%;
-    }
-    .input-container {
-      display: flex;
-    }
-    .input-container input {
-      flex: 1;
-      margin-right: 0.5rem;
-    }
-    .code-container {
-      background-color: #f8f9fa;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      padding: 1rem;
-      margin-top: 1rem;
-    }
-    .code-container pre {
-      margin: 0;
-      white-space: pre-wrap;
-    }
-    .loading {
-      text-align: center;
-      padding: 1rem;
-      color: #666;
-    }
-    .alert {
-      margin-top: 1rem;
-    }
-    .tab-content {
-      margin-top: 1rem;
-    }
-  </style>
+  <title>冷小北 · 自进化</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="container">
-    <!-- 头部 -->
-    <div class="header">
-      <h1 class="h3">冷小北</h1>
-      <p class="text-sm">AI 驱动的自主编程助手</p>
-    </div>
-
-    <!-- 内容区 -->
-    <div class="content">
-      <!-- 侧边栏 -->
-      <div class="sidebar">
-        <div class="nav-item active" data-tab="chat">对话</div>
-        <div class="nav-item" data-tab="analyze">代码分析</div>
-        <div class="nav-item" data-tab="generate">代码生成</div>
-        <div class="nav-item" data-tab="optimize">架构优化</div>
-        <div class="nav-item" data-tab="monitor">系统监控</div>
-        <div class="nav-item" data-tab="about">关于</div>
-      </div>
-
-      <!-- 主内容区 -->
-      <div class="main">
-        <!-- 对话标签页 -->
-        <div id="chat" class="tab-content">
-          <div class="chat-container" id="chat-container">
-            <div class="message bot-message">
-              <p>你好！我是冷小北，你的AI编程助手。有什么我可以帮助你的吗？</p>
-            </div>
-          </div>
-          <div class="input-container">
-            <input type="text" class="form-control" id="chat-input" placeholder="输入你的问题...">
-            <button class="btn btn-primary" id="send-btn">发送</button>
-          </div>
-        </div>
-
-        <!-- 代码分析标签页 -->
-        <div id="analyze" class="tab-content" style="display: none;">
-          <h3>代码分析</h3>
-          <div class="mb-3">
-            <label for="analyze-file" class="form-label">文件路径</label>
-            <input type="text" class="form-control" id="analyze-file" placeholder="输入文件路径">
-          </div>
-          <button class="btn btn-primary" id="analyze-btn">分析代码</button>
-          <div id="analyze-result" class="mt-3"></div>
-        </div>
-
-        <!-- 代码生成标签页 -->
-        <div id="generate" class="tab-content" style="display: none;">
-          <h3>代码生成</h3>
-          <div class="mb-3">
-            <label for="generate-prompt" class="form-label">生成提示</label>
-            <textarea class="form-control" id="generate-prompt" rows="3" placeholder="输入代码生成提示"></textarea>
-          </div>
-          <button class="btn btn-primary" id="generate-btn">生成代码</button>
-          <div id="generate-result" class="mt-3"></div>
-        </div>
-
-        <!-- 架构优化标签页 -->
-        <div id="optimize" class="tab-content" style="display: none;">
-          <h3>架构优化</h3>
-          <div class="mb-3">
-            <label for="optimize-project" class="form-label">项目路径</label>
-            <input type="text" class="form-control" id="optimize-project" placeholder="输入项目路径">
-          </div>
-          <button class="btn btn-primary" id="optimize-btn">优化架构</button>
-          <div id="optimize-result" class="mt-3"></div>
-        </div>
-
-        <!-- 系统监控标签页 -->
-        <div id="monitor" class="tab-content" style="display: none;">
-          <h3>系统监控</h3>
-          <div class="row">
-            <div class="col-md-6">
-              <div class="card mb-3">
-                <div class="card-body">
-                  <h5 class="card-title">系统信息</h5>
-                  <div id="system-info"></div>
-                </div>
-              </div>
-            </div>
-            <div class="col-md-6">
-              <div class="card mb-3">
-                <div class="card-body">
-                  <h5 class="card-title">MCP 服务器状态</h5>
-                  <div id="mcp-status">
-                    <p>连接中...</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 关于标签页 -->
-        <div id="about" class="tab-content" style="display: none;">
-          <h3>关于冷小北</h3>
-          <p>冷小北是一个 AI 驱动的自主编程助手，具有以下功能：</p>
-          <ul>
-            <li>代码分析</li>
-            <li>代码生成</li>
-            <li>架构优化</li>
-            <li>自主进化</li>
-            <li>系统监控</li>
-          </ul>
-          <p>版本：1.0.0</p>
-          <p>开发团队：冷小北团队</p>
+  <div class="app-shell">
+    <aside class="side">
+      <div class="brand">
+        <div class="brand-mark">LX</div>
+        <div>
+          <h1>冷小北</h1>
+          <p>Self-Evolution MVP</p>
         </div>
       </div>
-    </div>
+
+      <nav class="nav">
+        <button class="nav-btn active" data-view="evolve">自进化</button>
+        <button class="nav-btn" data-view="lessons">Lessons</button>
+        <button class="nav-btn" data-view="runs">Runs</button>
+        <button class="nav-btn" data-view="status">状态</button>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <section class="topbar">
+        <div>
+          <h2 id="view-title">自进化控制台</h2>
+          <p id="view-subtitle">学习其他 Agent 的长处，转成一次小步源码改进。</p>
+        </div>
+        <button id="refresh-btn" class="icon-btn" title="刷新">↻</button>
+      </section>
+
+      <section id="evolve" class="view active">
+        <div class="panel command-panel">
+          <label for="topic">学习方向</label>
+          <textarea id="topic" rows="4" placeholder="例如：学习 Claude Code 的任务规划能力"></textarea>
+
+          <label for="url">参考 URL（可选）</label>
+          <input id="url" type="url" placeholder="https://github.com/All-Hands-AI/OpenHands">
+
+          <div class="actions">
+            <button id="run-btn" class="primary-btn">学习并自进化</button>
+            <button id="learn-btn" class="secondary-btn">只生成 Lesson</button>
+            <button id="apply-btn" class="secondary-btn">应用 Pending</button>
+          </div>
+        </div>
+
+        <div class="grid two">
+          <div class="panel">
+            <div class="panel-head">
+              <h3>运行结果</h3>
+              <span id="run-state" class="pill">idle</span>
+            </div>
+            <pre id="result-box" class="output">等待指令。</pre>
+          </div>
+
+          <div class="panel">
+            <h3>最小边界</h3>
+            <ul class="rules">
+              <li>不自主修改 SOUL / CONSTITUTION</li>
+              <li>核心入口、执行器、权限、进化引擎需要确认</li>
+              <li>每次修改后运行编译与核心测试</li>
+              <li>失败复用现有进化引擎回滚</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section id="lessons" class="view">
+        <div class="panel">
+          <div class="panel-head">
+            <h3>Agent Lessons</h3>
+            <span id="lesson-count" class="pill">0</span>
+          </div>
+          <div id="lesson-list" class="list"></div>
+        </div>
+      </section>
+
+      <section id="runs" class="view">
+        <div class="panel">
+          <div class="panel-head">
+            <h3>Self-Evolution Runs</h3>
+            <span id="run-count" class="pill">0</span>
+          </div>
+          <div id="run-list" class="list"></div>
+        </div>
+      </section>
+
+      <section id="status" class="view">
+        <div class="grid two">
+          <div class="panel">
+            <h3>系统状态</h3>
+            <pre id="status-box" class="output compact">加载中...</pre>
+          </div>
+          <div class="panel">
+            <h3>健康检查</h3>
+            <pre id="health-box" class="output compact">加载中...</pre>
+          </div>
+        </div>
+      </section>
+    </main>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

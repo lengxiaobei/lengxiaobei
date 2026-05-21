@@ -1,236 +1,203 @@
-// 页面加载完成后执行
-document.addEventListener('DOMContentLoaded', function() {
-  // 初始化标签页切换
-  initTabs();
-  
-  // 初始化对话功能
-  initChat();
-  
-  // 初始化代码分析功能
-  initAnalyze();
-  
-  // 初始化代码生成功能
-  initGenerate();
-  
-  // 初始化架构优化功能
-  initOptimize();
-  
-  // 初始化系统监控
-  initMonitor();
+const state = {
+  view: 'evolve',
+  busy: false,
+};
+
+const titles = {
+  evolve: ['自进化控制台', '学习其他 Agent 的长处，转成一次小步源码改进。'],
+  lessons: ['Lessons', '查看已沉淀的 Agent 能力经验。'],
+  runs: ['Runs', '查看每次自进化运行记录和结果。'],
+  status: ['系统状态', '查看 Web、核心和健康检查状态。'],
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+  bindNavigation();
+  bindActions();
+  refreshAll();
 });
 
-// 初始化标签页切换
-function initTabs() {
-  const navItems = document.querySelectorAll('.nav-item');
-  const tabContents = document.querySelectorAll('.tab-content');
-  
-  navItems.forEach(item => {
-    item.addEventListener('click', function() {
-      // 移除所有激活状态
-      navItems.forEach(i => i.classList.remove('active'));
-      tabContents.forEach(c => c.style.display = 'none');
-      
-      // 激活当前标签
-      this.classList.add('active');
-      const tabId = this.getAttribute('data-tab');
-      document.getElementById(tabId).style.display = 'block';
+function bindNavigation() {
+  document.querySelectorAll('.nav-btn').forEach((button) => {
+    button.addEventListener('click', () => {
+      setView(button.dataset.view);
     });
   });
+
+  document.getElementById('refresh-btn').addEventListener('click', refreshAll);
 }
 
-// 初始化对话功能
-function initChat() {
-  const chatInput = document.getElementById('chat-input');
-  const sendBtn = document.getElementById('send-btn');
-  const chatContainer = document.getElementById('chat-container');
-  
-  // 发送按钮点击事件
-  sendBtn.addEventListener('click', sendMessage);
-  
-  // 输入框回车事件
-  chatInput.addEventListener('keypress', function(e) {
-    if (e.key === 'Enter') {
-      sendMessage();
-    }
+function bindActions() {
+  document.getElementById('run-btn').addEventListener('click', () => runSelfEvolution(false));
+  document.getElementById('learn-btn').addEventListener('click', learnOnly);
+  document.getElementById('apply-btn').addEventListener('click', () => runSelfEvolution(true));
+}
+
+function setView(view) {
+  state.view = view;
+  document.querySelectorAll('.nav-btn').forEach((button) => {
+    button.classList.toggle('active', button.dataset.view === view);
   });
-  
-  function sendMessage() {
-    const message = chatInput.value.trim();
-    if (message) {
-      // 添加用户消息
-      addMessage('user', message);
-      chatInput.value = '';
-      
-      // 模拟 AI 回复
-      setTimeout(() => {
-        addMessage('bot', `我收到了你的消息: ${message}`);
-      }, 1000);
-    }
+  document.querySelectorAll('.view').forEach((section) => {
+    section.classList.toggle('active', section.id === view);
+  });
+  const [title, subtitle] = titles[view] || titles.evolve;
+  document.getElementById('view-title').textContent = title;
+  document.getElementById('view-subtitle').textContent = subtitle;
+  refreshAll();
+}
+
+async function runSelfEvolution(applyPending) {
+  const topic = document.getElementById('topic').value.trim();
+  const url = document.getElementById('url').value.trim();
+
+  if (!applyPending && !topic) {
+    setResult('请输入学习方向。', 'warn');
+    return;
   }
-  
-  function addMessage(type, content) {
-    const messageDiv = document.createElement('div');
-    messageDiv.className = `message ${type}-message`;
-    messageDiv.innerHTML = `<p>${content}</p>`;
-    chatContainer.appendChild(messageDiv);
-    chatContainer.scrollTop = chatContainer.scrollHeight;
-  }
-}
 
-// 初始化代码分析功能
-function initAnalyze() {
-  const analyzeBtn = document.getElementById('analyze-btn');
-  const analyzeFile = document.getElementById('analyze-file');
-  const analyzeResult = document.getElementById('analyze-result');
-  
-  analyzeBtn.addEventListener('click', async function() {
-    const file = analyzeFile.value.trim();
-    if (file) {
-      analyzeResult.innerHTML = '<div class="loading">分析中...</div>';
-      
-      try {
-        const response = await electronAPI.sendMcpRequest({
-          id: Date.now().toString(),
-          method: 'analyzeCode',
-          params: { file: file }
-        });
-        
-        if (response.result && response.result.success) {
-          const analysis = response.result.analysis;
-          analyzeResult.innerHTML = `
-            <div class="alert alert-success">分析成功</div>
-            <div class="code-container">
-              <pre>文件: ${analysis.file_path}<br>
-行数: ${analysis.lines}<br>
-函数数: ${analysis.functions}<br>
-类数: ${analysis.classes}<br>
-导入数: ${analysis.imports}<br>
-潜在问题: ${analysis.potential_issues.join(', ')}
-              </pre>
-            </div>
-          `;
-        } else {
-          analyzeResult.innerHTML = `<div class="alert alert-danger">分析失败: ${response.result.message}</div>`;
-        }
-      } catch (error) {
-        analyzeResult.innerHTML = `<div class="alert alert-danger">错误: ${error.error}</div>`;
-      }
-    } else {
-      analyzeResult.innerHTML = '<div class="alert alert-warning">请输入文件路径</div>';
-    }
-  });
-}
-
-// 初始化代码生成功能
-function initGenerate() {
-  const generateBtn = document.getElementById('generate-btn');
-  const generatePrompt = document.getElementById('generate-prompt');
-  const generateResult = document.getElementById('generate-result');
-  
-  generateBtn.addEventListener('click', async function() {
-    const prompt = generatePrompt.value.trim();
-    if (prompt) {
-      generateResult.innerHTML = '<div class="loading">生成中...</div>';
-      
-      try {
-        const response = await electronAPI.sendMcpRequest({
-          id: Date.now().toString(),
-          method: 'generateCode',
-          params: { prompt: prompt }
-        });
-        
-        if (response.result && response.result.success) {
-          generateResult.innerHTML = `
-            <div class="alert alert-success">生成成功</div>
-            <div class="code-container">
-              <pre>${response.result.code}</pre>
-            </div>
-          `;
-        } else {
-          generateResult.innerHTML = `<div class="alert alert-danger">生成失败: ${response.result.message}</div>`;
-        }
-      } catch (error) {
-        generateResult.innerHTML = `<div class="alert alert-danger">错误: ${error.error}</div>`;
-      }
-    } else {
-      generateResult.innerHTML = '<div class="alert alert-warning">请输入生成提示</div>';
-    }
-  });
-}
-
-// 初始化架构优化功能
-function initOptimize() {
-  const optimizeBtn = document.getElementById('optimize-btn');
-  const optimizeProject = document.getElementById('optimize-project');
-  const optimizeResult = document.getElementById('optimize-result');
-  
-  optimizeBtn.addEventListener('click', async function() {
-    const project = optimizeProject.value.trim();
-    if (project) {
-      optimizeResult.innerHTML = '<div class="loading">优化中...</div>';
-      
-      try {
-        const response = await electronAPI.sendMcpRequest({
-          id: Date.now().toString(),
-          method: 'optimizeArchitecture',
-          params: { project: project }
-        });
-        
-        if (response.result && response.result.success) {
-          const recommendations = response.result.recommendations;
-          let recommendationsHtml = '';
-          recommendations.forEach((rec, index) => {
-            recommendationsHtml += `<li>${rec}</li>`;
-          });
-          
-          optimizeResult.innerHTML = `
-            <div class="alert alert-success">优化成功</div>
-            <div class="code-container">
-              <h5>优化建议:</h5>
-              <ul>${recommendationsHtml}</ul>
-            </div>
-          `;
-        } else {
-          optimizeResult.innerHTML = `<div class="alert alert-danger">优化失败: ${response.result.message}</div>`;
-        }
-      } catch (error) {
-        optimizeResult.innerHTML = `<div class="alert alert-danger">错误: ${error.error}</div>`;
-      }
-    } else {
-      optimizeResult.innerHTML = '<div class="alert alert-warning">请输入项目路径</div>';
-    }
-  });
-}
-
-// 初始化系统监控
-function initMonitor() {
-  const systemInfoDiv = document.getElementById('system-info');
-  const mcpStatusDiv = document.getElementById('mcp-status');
-  
-  // 获取系统信息
-  electronAPI.getSystemInfo().then(info => {
-    systemInfoDiv.innerHTML = `
-      <p>平台: ${info.platform}</p>
-      <p>应用版本: ${info.version}</p>
-      <p>Electron版本: ${info.electron}</p>
-    `;
-  });
-  
-  // 测试 MCP 服务器连接
-  testMcpConnection();
-  
-  function testMcpConnection() {
-    electronAPI.sendMcpRequest({
-      id: Date.now().toString(),
-      method: 'health'
-    }).then(response => {
-      if (response.result) {
-        mcpStatusDiv.innerHTML = `<p class="text-success">✅ 连接正常</p>`;
-      } else {
-        mcpStatusDiv.innerHTML = `<p class="text-danger">❌ 连接失败</p>`;
-      }
-    }).catch(error => {
-      mcpStatusDiv.innerHTML = `<p class="text-danger">❌ 连接失败: ${error.error}</p>`;
+  setBusy(true, applyPending ? 'applying pending' : 'running');
+  try {
+    const data = await postJSON('/api/self-evolve', {
+      topic,
+      url,
+      apply_pending: applyPending,
     });
+    setResult(JSON.stringify(data.result || data, null, 2), data.status === 'ok' ? 'ok' : 'warn');
+    await refreshAll();
+  } catch (error) {
+    setResult(error.message, 'error');
+  } finally {
+    setBusy(false, 'idle');
   }
+}
+
+async function learnOnly() {
+  const topic = document.getElementById('topic').value.trim();
+  const url = document.getElementById('url').value.trim();
+
+  if (!topic) {
+    setResult('请输入学习方向。', 'warn');
+    return;
+  }
+
+  setBusy(true, 'learning');
+  try {
+    const data = await postJSON('/api/learn-agent', { topic, url });
+    setResult(JSON.stringify(data.lesson || data, null, 2), data.status === 'ok' ? 'ok' : 'warn');
+    await refreshLessons();
+  } catch (error) {
+    setResult(error.message, 'error');
+  } finally {
+    setBusy(false, 'idle');
+  }
+}
+
+async function refreshAll() {
+  await Promise.allSettled([
+    refreshLessons(),
+    refreshRuns(),
+    refreshStatus(),
+  ]);
+}
+
+async function refreshLessons() {
+  const data = await getJSON('/api/lessons');
+  document.getElementById('lesson-count').textContent = String(data.count || 0);
+  const list = document.getElementById('lesson-list');
+  const lessons = data.lessons || [];
+  if (!lessons.length) {
+    list.innerHTML = '<div class="empty">还没有 lesson。</div>';
+    return;
+  }
+  list.innerHTML = lessons.slice().reverse().map((lesson) => `
+    <article class="item">
+      <div class="item-row">
+        <strong>${escapeHTML(lesson.capability || lesson.topic || '未命名能力')}</strong>
+        <span class="pill">${escapeHTML(lesson.status || 'pending')}</span>
+      </div>
+      <p>${escapeHTML(lesson.pattern || '')}</p>
+      <p class="muted">${escapeHTML(lesson.source || 'unknown')} · ${escapeHTML((lesson.suggested_files || []).join(', '))}</p>
+    </article>
+  `).join('');
+}
+
+async function refreshRuns() {
+  const data = await getJSON('/api/runs');
+  document.getElementById('run-count').textContent = String(data.count || 0);
+  const list = document.getElementById('run-list');
+  const runs = data.runs || [];
+  if (!runs.length) {
+    list.innerHTML = '<div class="empty">还没有运行记录。</div>';
+    return;
+  }
+  list.innerHTML = runs.slice().reverse().map((run) => `
+    <article class="item">
+      <div class="item-row">
+        <strong>${escapeHTML(run.topic || run.goal || '自进化运行')}</strong>
+        <span class="pill">${escapeHTML(run.status || 'unknown')}</span>
+      </div>
+      <p>${escapeHTML(run.goal || '')}</p>
+      <p class="muted">${escapeHTML(run.target_file || '')}</p>
+    </article>
+  `).join('');
+}
+
+async function refreshStatus() {
+  try {
+    const [status, health] = await Promise.all([
+      getJSON('/api/status'),
+      getJSON('/api/health'),
+    ]);
+    document.getElementById('status-box').textContent = JSON.stringify(status, null, 2);
+    document.getElementById('health-box').textContent = JSON.stringify(health, null, 2);
+  } catch (error) {
+    document.getElementById('health-box').textContent = error.message;
+  }
+}
+
+async function getJSON(url) {
+  const response = await fetch(url);
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : {};
+  if (!response.ok) {
+    throw new Error(data.error || `${response.status} ${response.statusText}`);
+  }
+  return data;
+}
+
+async function postJSON(url, body) {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : {};
+  if (!response.ok) {
+    throw new Error(data.error || `${response.status} ${response.statusText}`);
+  }
+  return data;
+}
+
+function setBusy(busy, label) {
+  state.busy = busy;
+  document.getElementById('run-state').textContent = label;
+  ['run-btn', 'learn-btn', 'apply-btn'].forEach((id) => {
+    document.getElementById(id).disabled = busy;
+  });
+}
+
+function setResult(content, tone) {
+  const box = document.getElementById('result-box');
+  box.textContent = content;
+  box.dataset.tone = tone;
+}
+
+function escapeHTML(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
 }

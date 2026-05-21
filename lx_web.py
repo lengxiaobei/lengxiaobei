@@ -13,6 +13,7 @@ PROJECT_ROOT = Path(__file__).parent.resolve()
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from flask import Flask, jsonify, request, send_from_directory, make_response
+from src.utils import load_json
 
 app = Flask(__name__, static_folder=None)
 
@@ -73,6 +74,9 @@ def index():
             "status": "GET /api/status",
             "health": "GET /api/health",
             "evolution": "POST /api/evolution",
+            "self_evolve": "POST /api/self-evolve",
+            "lessons": "GET /api/lessons",
+            "runs": "GET /api/runs",
         }
     })
 
@@ -152,6 +156,67 @@ def api_evolution():
         return jsonify({"result": result, "status": "ok"})
     except Exception as e:
         return jsonify({"error": str(e), "status": "failed"}), 500
+
+
+@app.route("/api/self-evolve", methods=["POST"])
+def api_self_evolve():
+    agent = _get_agent()
+    if agent is None:
+        return jsonify({"error": "Agent 未就绪"}), 503
+
+    data = request.get_json(silent=True) or {}
+    topic = data.get("topic", "").strip()
+    url = data.get("url", "").strip()
+    apply_pending = bool(data.get("apply_pending", False))
+
+    if not topic and not apply_pending:
+        return jsonify({"error": "topic 为空"}), 400
+
+    try:
+        if apply_pending:
+            result = agent.evolve_from_lessons()
+        else:
+            result = agent.self_evolve(topic, url=url)
+        return jsonify({"result": result, "status": "ok"})
+    except Exception as e:
+        return jsonify({"error": str(e), "status": "failed"}), 500
+
+
+@app.route("/api/learn-agent", methods=["POST"])
+def api_learn_agent():
+    agent = _get_agent()
+    if agent is None:
+        return jsonify({"error": "Agent 未就绪"}), 503
+
+    data = request.get_json(silent=True) or {}
+    topic = data.get("topic", "").strip()
+    url = data.get("url", "").strip()
+    if not topic:
+        return jsonify({"error": "topic 为空"}), 400
+
+    try:
+        lesson = agent.learn_agent(topic, url=url)
+        return jsonify({"lesson": lesson, "status": "ok"})
+    except Exception as e:
+        return jsonify({"error": str(e), "status": "failed"}), 500
+
+
+@app.route("/api/lessons", methods=["GET"])
+def api_lessons():
+    lessons_file = PROJECT_ROOT / "memory" / "agent_lessons.json"
+    lessons = load_json(str(lessons_file), default=[])
+    if not isinstance(lessons, list):
+        lessons = []
+    return jsonify({"lessons": lessons, "count": len(lessons), "status": "ok"})
+
+
+@app.route("/api/runs", methods=["GET"])
+def api_runs():
+    runs_file = PROJECT_ROOT / "memory" / "self_evolution_runs.json"
+    runs = load_json(str(runs_file), default=[])
+    if not isinstance(runs, list):
+        runs = []
+    return jsonify({"runs": runs, "count": len(runs), "status": "ok"})
 
 @app.route("/api/discover", methods=["POST"])
 def api_discover():
