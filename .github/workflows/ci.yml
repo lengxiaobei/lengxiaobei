@@ -41,7 +41,7 @@ jobs:
 
       - name: Run unit tests
         run: |
-          pytest tests/ -q -n 4 --tb=short
+          pytest tests/ -q -n 4 --tb=short --cov=src --cov-report=xml
 
       - name: Upload coverage
         uses: codecov/codecov-action@v4

@@ -1,116 +1,63 @@
 #!/bin/bash
-# 冷小北统一启动脚本
+# 冷小北启动脚本 (Python-only)
+# Rust control_layer / memory_layer 已降级为可选，见 legacy_start_rust.sh
 
-# 进入项目根目录
+set -e
 cd "$(dirname "$0")"
 
-echo "=== 冷小北启动脚本 ==="
+echo "=== 冷小北启动 ==="
 echo ""
 
-# 检查Rust是否安装
-if ! command -v rustc &> /dev/null; then
-    echo "❌ Rust未安装，请先安装Rust"
-    echo "   安装命令: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
-    exit 1
-fi
-
-# 检查Python是否安装
+# ---- Python 环境 ----
 if ! command -v python3 &> /dev/null; then
-    echo "❌ Python未安装，请先安装Python 3.10+"
+    echo "❌ 需要 Python 3.10+"
     exit 1
 fi
 
-# 检查依赖
-if [ ! -d "venv" ]; then
-    echo "⚠️ 虚拟环境未创建，正在创建..."
-    python3 -m venv venv
-    echo "✅ 虚拟环境创建成功"
+PYTHON=$(command -v python3)
+
+# 虚拟环境 (可选)
+if [ -f "venv/bin/activate" ]; then
+    source venv/bin/activate
+    echo "✅ 虚拟环境已激活"
 fi
 
-# 激活虚拟环境
-echo "激活虚拟环境..."
-source venv/bin/activate
-
-# 安装Python依赖
-echo "安装Python依赖..."
-pip install -r requirements.txt
-
-# 编译控制层
-echo ""
-echo "=== 编译控制层 ==="
-cd control_layer
-cargo build
-if [ $? -eq 0 ]; then
-    echo "✅ 控制层编译成功"
-else
-    echo "❌ 控制层编译失败"
-    exit 1
+# 依赖检查
+if [ -f "requirements.txt" ]; then
+    if ! python3 -c "import yaml" 2>/dev/null; then
+        echo "⚠️  安装依赖..."
+        pip install -r requirements.txt --quiet
+    fi
 fi
-cd ..
 
-# 编译记忆层
+echo "✅ Python 环境就绪"
 echo ""
-echo "=== 编译记忆层 ==="
-cd memory_layer
-cargo build
-if [ $? -eq 0 ]; then
-    echo "✅ 记忆层编译成功"
-else
-    echo "❌ 记忆层编译失败"
-    exit 1
-fi
-cd ..
 
-# 启动控制层
+# ---- 运行诊断 ----
+echo "--- 系统诊断 ---"
+python3 -m src.doctor --quick 2>/dev/null || echo "⚠️  doctor 不可用，跳过"
+
+# ---- 启动核心 ----
 echo ""
-echo "=== 启动控制层 ==="
-cd control_layer
-target/debug/control_layer &
-CONTROL_PID=$!
-cd ..
-
-# 等待控制层启动
+echo "--- 启动冷小北核心 ---"
+python3 -m src.core &
+CORE_PID=$!
 sleep 2
 
-# 启动记忆层
+# ---- 健康检查 ----
 echo ""
-echo "=== 启动记忆层 ==="
-cd memory_layer
-target/debug/memory_layer &
-MEMORY_PID=$!
-cd ..
-
-# 等待记忆层启动
-sleep 2
-
-# 核心层由 Rust 控制层自动管理，无需单独启动
-# 控制层会自动启动并监控 python3 -m src 进程
-
-# 启动Web界面
-echo ""
-echo "=== 启动Web界面 ==="
-if [ -f "lx_web.py" ]; then
-    python3 lx_web.py &
-    WEB_PID=$!
+echo "--- 健康检查 ---"
+if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
+    echo "✅ 核心健康检查通过 (端口 8000)"
 else
-    echo "⚠️  lx_web.py 不存在，跳过Web界面启动"
-    WEB_PID=""
+    echo "⚠️  健康检查端点尚未就绪（核心可能在启动中）"
 fi
-
-# 等待Web界面启动
-sleep 2
 
 echo ""
 echo "=== 冷小北启动完成 ==="
-echo "控制层 PID: $CONTROL_PID (管理核心层)"
-echo "记忆层 PID: $MEMORY_PID"
-echo "Web界面 PID: $WEB_PID"
+echo "核心 PID: $CORE_PID"
+echo "健康检查: http://localhost:8000/health"
 echo ""
-echo "控制层服务: http://localhost:8082"
-echo "记忆层服务: http://localhost:8081"
-echo "Web界面: http://localhost:5001"
-echo ""
-echo "按 Ctrl+C 停止所有服务"
 
-# 等待所有进程结束
-wait $CONTROL_PID $MEMORY_PID ${WEB_PID:+"$WEB_PID"}
+trap "echo ''; echo '正在停止...'; kill $CORE_PID 2>/dev/null; exit 0" INT TERM
+wait $CORE_PID

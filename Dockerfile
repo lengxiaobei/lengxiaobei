@@ -35,11 +35,11 @@ ENV PYTHONUNBUFFERED=1
 ENV LOG_LEVEL=INFO
 
 # Expose ports
-EXPOSE 8080 8081 8082
+EXPOSE 8000 8080 8081 8082
 
-# Health check
+# Health check (health_check.py defaults to port 8000)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:8081/health || exit 1
+    CMD curl -f http://localhost:8000/health || exit 1
 
 # Default command: run as daemon
 CMD ["python", "-m", "src.core"]

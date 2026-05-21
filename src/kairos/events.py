@@ -167,37 +167,60 @@ class EventBus:
 
 
 # ---------------------------------------------------------------------------
-# 全局单例 (每个进程一个)
+# 全局实例 — 必须在应用启动时显式 init_event_bus(project_root)
 # ---------------------------------------------------------------------------
 
 _bus: Optional[EventBus] = None
 _bus_lock = threading.Lock()
 
 
-def get_event_bus(project_root: Optional[str] = None) -> EventBus:
+class EventBusNotInitialized(Exception):
+    """事件总线未初始化 — 请在应用启动时调用 init_event_bus(project_root)"""
+    pass
+
+
+def init_event_bus(project_root: str) -> EventBus:
+    """初始化事件总线（应用启动时调用一次）"""
     global _bus
-    if _bus is None:
-        with _bus_lock:
-            if _bus is None:
-                _bus = EventBus(project_root)
+    with _bus_lock:
+        _bus = EventBus(project_root)
     return _bus
 
 
-def emit(event_type: str, data: Dict[str, Any] = None, source: str = "system") -> EventRecord:
-    """便捷发布"""
-    return get_event_bus().emit(event_type, data, source)
+def get_event_bus() -> EventBus:
+    """获取事件总线实例。未初始化时抛出 EventBusNotInitialized。"""
+    if _bus is None:
+        raise EventBusNotInitialized(
+            "事件总线未初始化。请在应用启动时调用 init_event_bus(project_root)。"
+        )
+    return _bus
+
+
+def emit(event_type: str, data: Dict[str, Any] = None,
+         source: str = "system") -> Optional[EventRecord]:
+    """发布事件。未初始化时静默跳过（不阻塞业务代码）。"""
+    try:
+        return get_event_bus().emit(event_type, data, source)
+    except EventBusNotInitialized:
+        return None
 
 
 def subscribe(event_type: str, handler: Callable[[EventRecord], None]):
-    """便捷订阅"""
+    """订阅事件"""
     get_event_bus().subscribe(event_type, handler)
 
 
 def recent(event_type: str = None, limit: int = 50) -> List[EventRecord]:
-    """便捷查询"""
-    return get_event_bus().recent(event_type, limit)
+    """查询最近事件"""
+    try:
+        return get_event_bus().recent(event_type, limit)
+    except EventBusNotInitialized:
+        return []
 
 
 def stats() -> dict:
-    """便捷统计"""
-    return get_event_bus().stats()
+    """统计摘要"""
+    try:
+        return get_event_bus().stats()
+    except EventBusNotInitialized:
+        return {"error": "事件总线未初始化"}

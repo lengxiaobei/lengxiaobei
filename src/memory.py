@@ -232,7 +232,8 @@ class Memory:
             description: 记忆描述
         """
         # 确保类型符合Claude Code规范
-        valid_types = ["user", "feedback", "project", "reference", "context"]
+        valid_types = ["user", "feedback", "project", "reference", "context",
+                       "raw_event", "episode", "knowledge", "profile"]
         if mem_type not in valid_types:
             mem_type = "context"  # 默认类型
             
@@ -308,6 +309,27 @@ class Memory:
             # 写回文件
             with open(self.memory_md_path, 'w', encoding='utf-8') as f:
                 f.write('\n'.join(lines))
+
+    def scan_layer(self, mem_type: str, limit: int = 100) -> List[Dict]:
+        """
+        按类型扫描记忆层，不需要查询关键词。
+        供 MemoryTree 分层读取使用。
+        """
+        cursor = self.conn.execute(
+            "SELECT id, type, content, role, tags, accessed_count, name, description "
+            "FROM memories WHERE type = ? ORDER BY created_at DESC LIMIT ?",
+            (mem_type, limit),
+        )
+        results = []
+        for row in cursor.fetchall():
+            results.append({
+                "id": row[0], "type": row[1],
+                "content": row[2], "role": row[3],
+                "tags": json.loads(row[4]) if row[4] else [],
+                "accessed_count": row[5],
+                "name": row[6] or "", "description": row[7] or "",
+            })
+        return results
 
     def search(self, query: str, limit: int = 5, mem_type: Optional[str] = None) -> List[Dict]:
         """

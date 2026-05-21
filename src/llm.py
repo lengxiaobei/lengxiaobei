@@ -50,14 +50,17 @@ def _load_openclaw_keys() -> dict:
 
 
 _OPENCLAW_KEYS = _load_openclaw_keys()
+_warned_providers: set = set()  # 每个 provider 缺 key 只警告一次
 
 
 def _get_key(provider: str) -> str:
-    """获取 provider API key（从 openclaw.json 读取）"""
+    """获取 provider API key（从 openclaw.json 读取）。缺 key 时每个 provider 仅警告一次。"""
     key = _OPENCLAW_KEYS.get(provider, "")
     if key:
         return key
-    print(f"[LLM] 未找到 provider {provider} 的 API key")
+    if provider not in _warned_providers:
+        _warned_providers.add(provider)
+        print(f"[LLM] 未找到 provider {provider} 的 API key（仅提示一次）")
     return ""
 
 
@@ -578,23 +581,19 @@ def chat(
     
     # 计算超时时间（分级）
     timeout = get_timeout(cats, prompt)
-    print(f"[LLM] 任务分类: {cats}, 超时设置: {timeout:.1f}秒")
-    
+
+    # 如果没有可用模型，直接返回（避免刷屏日志）
+    available = [m for m in unique_models if MODELS.get(m) and _get_key(MODELS[m]["provider"])]
+    if not available:
+        return "[调用失败] 所有模型服务暂时不可用，请先配置至少一个 LLM provider 的 API Key"
+
+    print(f"[LLM] 任务分类: {cats}, 可用模型: {len(available)}/{len(unique_models)}")
+
     # 尝试所有备选模型
-    for model in unique_models:
-        cfg = MODELS.get(model)
-        if not cfg:
-            continue
-        
-        api_key = _get_key(cfg["provider"])
-        if not api_key:
-            print(f"[LLM] 跳过模型 {model}，API Key 缺失")
-            # 记录错误
-            _model_stats.record_error(model)
-            continue
-        
-        print(f"[LLM] 尝试使用模型: {model}")
-        
+    for model in available:
+        cfg = MODELS[model]
+        api_key = _get_key(cfg["provider"])  # 静默获取（已过滤过）
+
         # 检查缓存
         if use_cache:
             cached = get_cached_response(model, prompt, system)

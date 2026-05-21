@@ -187,11 +187,7 @@ class MemoryTree:
 
     def refine_raw_to_episode(self) -> Optional[dict]:
         """LLM 驱动的 raw_event → episode 提炼"""
-        if not self.backend:
-            return None
-
-        # 获取最近的 raw_events
-        raw = self.backend.search("", mem_type="raw_event", limit=30)
+        raw = self.get_layer("raw_event", limit=30)
         if not raw:
             return None
 
@@ -217,17 +213,14 @@ class MemoryTree:
 
     def refine_episode_to_knowledge(self) -> List[dict]:
         """LLM 驱动的 episode → knowledge 提炼"""
-        if not self.backend:
-            return []
-
-        episodes = self.backend.search("", mem_type="episode", limit=10)
+        episodes = self.get_layer("episode", limit=10)
         if not episodes:
             return []
 
         eps_text = "\n".join(
             r['content'][:400] for r in episodes
         )
-        existing = self.backend.search("", mem_type="knowledge", limit=20)
+        existing = self.get_layer("knowledge", limit=20)
         existing_text = "\n".join(r['content'][:200] for r in existing) or "无已有知识"
 
         prompt = EPISODE_TO_KNOWLEDGE_PROMPT.format(
@@ -256,13 +249,10 @@ class MemoryTree:
 
     def refine_knowledge_to_profile(self, profile_subject: str = "冷小北") -> Optional[dict]:
         """LLM 驱动的 knowledge → profile 提炼"""
-        if not self.backend:
-            return None
-
-        current = self.backend.search("", mem_type="profile", limit=5)
+        current = self.get_layer("profile", limit=5)
         profile_text = "\n".join(r['content'][:300] for r in current) or "{}"
 
-        new_knowledge = self.backend.search("", mem_type="knowledge", limit=10)
+        new_knowledge = self.get_layer("knowledge", limit=10)
         knowledge_text = "\n".join(
             f"[{r.get('tags', '')}] {r['content'][:200]}" for r in new_knowledge
         ) or "无新知识"
@@ -289,13 +279,13 @@ class MemoryTree:
 
     def get_layer(self, layer: str, limit: int = 20) -> List[dict]:
         """获取某一层的记忆"""
-        if self.backend:
-            return self.backend.search("", mem_type=layer, limit=limit)
+        if self.backend and hasattr(self.backend, "scan_layer"):
+            return self.backend.scan_layer(layer, limit=limit)
         return []
 
     def search_all(self, query: str, limit: int = 10) -> List[dict]:
-        """跨层搜索"""
-        if self.backend:
+        """跨层关键词搜索"""
+        if self.backend and query:
             return self.backend.search(query, limit=limit)
         return []
 
@@ -313,11 +303,8 @@ class MemoryTree:
         """各层记忆统计"""
         counts = {}
         for layer in LAYERS:
-            if self.backend:
-                results = self.backend.search("", mem_type=layer, limit=1000)
-                counts[layer] = len(results)
-            else:
-                counts[layer] = 0
+            items = self.get_layer(layer, limit=1000)
+            counts[layer] = len(items)
         return {"layers": counts, "total": sum(counts.values())}
 
     # ---- 工具 ----

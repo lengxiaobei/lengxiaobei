@@ -312,8 +312,10 @@ class AutonomousEvolutionEngine:
                 results.append({"improvement": rec.to_dict(), "result": result})
                 if result.get("status") == "success":
                     success_count += 1
-                # 标记已处理
-                self.curator.mark_seen(rec.signature)
+                    # 只标记成功的进化，失败的保留以供重试
+                    self.curator.mark_seen(rec.signature)
+                else:
+                    print(f"   ⚠️  进化失败，保留在待处理队列: {rec.issue[:50]}")
             except Exception as e:
                 import traceback
                 traceback.print_exc()

@@ -138,24 +138,31 @@ class HealthCheckServer:
         self.running = False
     
     def start(self):
-        """启动健康检查服务器"""
+        """启动健康检查服务器。端口冲突时自动尝试 8001, 8002。"""
         if self.running:
             return
-        
-        try:
-            self.server = HTTPServer((self.host, self.port), HealthCheckHandler)
-            self.running = True
-            
-            # 在后台线程中运行服务器
-            self.server_thread = threading.Thread(target=self._run_server, daemon=True)
-            self.server_thread.start()
-            
-            print(f"[HealthCheck] 健康检查服务器启动在 http://{self.host}:{self.port}")
-        except OSError as e:
-            if e.errno == 48:  # Address already in use
-                print(f"[HealthCheck] 健康检查服务器端口 {self.port} 已被占用，跳过启动")
-            else:
-                print(f"[HealthCheck] 启动健康检查服务器失败: {e}")
+
+        for offset in range(3):
+            port = self.port + offset
+            try:
+                self.server = HTTPServer((self.host, port), HealthCheckHandler)
+                self.port = port
+                self.running = True
+
+                self.server_thread = threading.Thread(target=self._run_server, daemon=True)
+                self.server_thread.start()
+
+                print(f"[HealthCheck] 健康检查服务器启动在 http://{self.host}:{self.port}")
+                return
+            except OSError as e:
+                if e.errno == 48:  # Address already in use
+                    if offset < 2:
+                        print(f"[HealthCheck] 端口 {port} 被占用，尝试 {port + 1}...")
+                    else:
+                        print(f"[HealthCheck] 所有端口 ({self.port}-{self.port + 2}) 被占用，跳过启动")
+                else:
+                    print(f"[HealthCheck] 启动失败: {e}")
+                    break
     
     def stop(self):
         """停止健康检查服务器"""

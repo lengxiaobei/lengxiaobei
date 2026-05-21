@@ -62,6 +62,8 @@ _MODULE_MAP = {
     "CronScheduler": "kairos",
     "create_kairos": "kairos",
     "EventBus": "kairos.events",
+    "EventBusNotInitialized": "kairos.events",
+    "init_event_bus": "kairos.events",
     "emit": "kairos.events",
     "subscribe": "kairos.events",
 

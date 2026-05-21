@@ -54,7 +54,13 @@ class ImprovementRecord:
 
     @property
     def signature(self) -> str:
-        return f"{self.file}:{self.issue[:60]}"
+        """统一去重签名: file + issue (截断60字符) + category"""
+        return f"{self.file}:{self.issue[:60]}:{self.category}"
+
+    @classmethod
+    def make_signature(cls, file: str, issue: str, category: str = "optimization") -> str:
+        """静态方法：生成统一签名，供 curator/kairos/guardian 共用去重"""
+        return f"{file}:{issue[:60]}:{category}"
 
     @classmethod
     def from_curator(cls, improvement: Any, source: str = "curator") -> "ImprovementRecord":
@@ -72,6 +78,7 @@ class ImprovementRecord:
 
     @classmethod
     def from_kairos(cls, data: Dict[str, Any]) -> Optional["ImprovementRecord"]:
+        """从 KAIROS pending_improvement 创建统一记录。兼容旧字段名。"""
         file_path = data.get("file", data.get("file_path", ""))
         issue = data.get("issue", data.get("description", ""))
         if not file_path or not issue:
@@ -84,6 +91,8 @@ class ImprovementRecord:
             type=data.get("type", "code_quality"),
             suggestion=data.get("suggestion", ""),
             confidence=data.get("confidence", 0.8),
+            severity=data.get("severity", "minor"),
+            category=data.get("category", "optimization"),
         )
 
     def to_dict(self) -> Dict[str, Any]:
