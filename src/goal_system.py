@@ -385,6 +385,53 @@ class GoalSystem:
             "type_stats": type_stats, "priority_stats": priority_stats
         }
 
+    def create_goals_from_direction(self, direction: str, boundaries: str = "",
+                                     pace: str = "优先修最危险的问题") -> List[str]:
+        """
+        方向驱动：将宿主方向转化为具体目标
+
+        对齐 docs/AUTONOMY.md 的自主决策循环 Step 3（排序任务）。
+        """
+        prompt = f"""宿主给了方向，请将其转化为 3-5 个具体可执行的目标。
+
+方向：{direction}
+边界：{boundaries or '不修改安全底线，不产生费用，不删除核心记忆'}
+节奏：{pace}
+
+目标类型：learning, performance, knowledge, exploration, maintenance, innovation
+优先级：low, medium, high, critical
+
+只返回 JSON：{{"goals": [{{"title": "...", "description": "...", "type": "maintenance", "priority": "high", "deadline_days": 7, "tags": ["..."]}}]}}"""
+
+        try:
+            response = chat(prompt, system="你是冷小北的目标规划模块。只返回JSON。", temperature=0.3)
+            data = extract_json(response)
+            created_ids = []
+            for gdata in data.get("goals", []):
+                try:
+                    gtype = GoalType(gdata.get("type", "maintenance"))
+                except (ValueError, KeyError):
+                    gtype = GoalType.MAINTENANCE
+                try:
+                    gprio = GoalPriority(gdata.get("priority", "medium"))
+                except (ValueError, KeyError):
+                    gprio = GoalPriority.MEDIUM
+                deadline_days = int(gdata.get("deadline_days", 7))
+                gid = self.create_goal(
+                    title=gdata.get("title", "未命名目标"),
+                    description=gdata.get("description", ""),
+                    goal_type=gtype, priority=gprio,
+                    deadline=time.time() + (deadline_days * 24 * 3600),
+                    tags=gdata.get("tags", ["autonomy"]),
+                )
+                if gid and gid.id:
+                    created_ids.append(gid.id)
+            logger.info(f"方向转化目标完成: {direction} -> {len(created_ids)} 个目标")
+            return created_ids
+        except Exception as e:
+            logger.warning(f"方向转化目标失败: {e}")
+            return []
+
 
 def create_goal_system(project_root: str) -> GoalSystem:
     return GoalSystem(project_root)

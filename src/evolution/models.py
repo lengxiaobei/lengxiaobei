@@ -50,7 +50,6 @@ class ImprovementRecord:
     confidence: float = 0.8
     severity: str = "minor"
     category: str = "optimization"
-    risk_level: str = "medium"
 
     @property
     def signature(self) -> str:

@@ -25,6 +25,8 @@ from .facade_evolution import EvolutionFacade
 from .facade_guardian import GuardianFacade
 from . import llm
 from .monitoring import stop_monitoring
+from .autonomy import AutonomyEngine
+from .self_evolution import SelfEvolutionCore
 
 
 class LengXiaobei:
@@ -52,6 +54,8 @@ class LengXiaobei:
         self.initialized = True
         self._degraded = False
         self._degraded_reason = ""
+        self.autonomy = AutonomyEngine(self)
+        self.self_evolution = SelfEvolutionCore(str(self.project_root))
 
         if not memory_only:
             self._eager_init()
@@ -153,6 +157,33 @@ class LengXiaobei:
             return True, "无宪法系统"
         allowed, reason, _ = constitution.is_action_allowed(action)
         return allowed, reason
+
+    def run_autonomously(self, direction: str, boundary: str = "", pace: str = "优先修最危险的问题") -> str:
+        """
+        方向驱动自主运行 — 对齐 AUTONOMY.md
+
+        宿主只需给方向、边界、节奏，冷小北自主完成：
+        理解方向 -> 扫描现状 -> 排序任务 -> 执行验证 -> 复盘记忆
+
+        只有高风险动作才会停下来问宿主。
+        """
+        report = self.autonomy.run(direction=direction, boundary=boundary, pace=pace)
+        return self.autonomy.format_report(report)
+
+    def learn_agent(self, topic: str, url: str = "") -> Dict[str, Any]:
+        """学习其他 Agent 的长处并写入 lesson 记忆。"""
+        lesson = self.self_evolution.learn(topic, url=url)
+        return lesson.to_dict()
+
+    def evolve_from_lessons(self) -> Dict[str, Any]:
+        """从下一条 pending lesson 触发一次自进化。"""
+        self.self_evolution.evolution_engine = self.evolution_facade.autonomous_evolution
+        return self.self_evolution.evolve_from_lessons()
+
+    def self_evolve(self, topic: str, url: str = "") -> Dict[str, Any]:
+        """快速闭环：学习其他 Agent -> 改自身源码 -> 测试 -> 记录。"""
+        self.self_evolution.evolution_engine = self.evolution_facade.autonomous_evolution
+        return self.self_evolution.self_evolve(topic, url=url)
 
     # ------------------------------------------------------------------
     # 守护 API

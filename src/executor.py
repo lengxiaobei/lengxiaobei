@@ -21,12 +21,13 @@ class ExecResult:
 
 
 class SafetyGate:
-    """安全门控：基于白名单 + 黑名单的分级权限控制"""
+    """安全门控：基于白名单 + 黑名单的5级权限控制（对齐 AUTONOMY.md）"""
 
-    RISK_LOW = "low"
-    RISK_MEDIUM = "medium"
-    RISK_HIGH = "high"
-    RISK_CRITICAL = "critical"
+    RISK_LOW = "low"              # 可自主执行
+    RISK_MEDIUM = "medium"        # 可自主执行但需记录
+    RISK_HIGH = "high"            # 必须先确认
+    RISK_CRITICAL = "critical"    # 默认禁止，除非宿主明确授权
+    RISK_FORBIDDEN = "forbidden"  # 永久禁止
 
     # 低风险命令白名单 — 仅限真正只读/无副作用的命令
     _LOW_RISK_COMMANDS = {
@@ -42,43 +43,53 @@ class SafetyGate:
         "ping", "dig", "nslookup",
     }
 
-    # 中等风险 — 可执行但有副作用，需确认
+    # 中等风险 — 可执行但副作用有限，自主运行时可执行但需记录
     _MEDIUM_RISK_COMMANDS = {
-        # 开发工具（可执行任意代码）
-        "python3", "python", "node", "cargo", "rustc", "go",
-        # 包管理器（可安装/修改环境）
-        "pip", "pip3", "npm", "npx",
-        # 版本控制（可修改文件/推送代码）
-        "git",
-        # 文本处理（可原地修改）
-        "sed",
-        # 网络下载（可写入文件）
-        "curl", "wget",
         # 压缩/解压（可创建/覆盖文件）
         "tar", "gzip", "gunzip", "zip", "unzip",
+        # 文本处理（可原地修改，但通常用于管道）
+        "sed",
         # 管道组合
         "xargs",
     }
 
     # 高风险命令 — 需明确确认
+    # 包含：可执行任意代码、可安装软件、可推送代码、可下载文件、可修改文件系统
     _HIGH_RISK_COMMANDS = {
+        # 破坏性操作
         "rm", "shutdown", "reboot", "sudo", "kill", "killall",
         "systemctl", "service", "launchctl",
         # 文件修改操作
         "mkdir", "cp", "mv", "touch", "chmod", "chown",
+        # 开发工具（可执行任意代码：python -c "..."）
+        "python3", "python", "node", "cargo", "rustc", "go",
+        # 包管理器（可安装/修改环境）
+        "pip", "pip3", "npm", "npx",
+        # 网络下载（可写入文件/下载恶意内容）
+        "curl", "wget",
     }
 
-    # 禁止的命令模式
+    # 极高风险 — 默认禁止，除非宿主明确授权
+    _CRITICAL_RISK_COMMANDS = {
+        # 支付/采购相关
+        "stripe", "paypal", "aws", "gcloud", "az",
+        # 发布相关
+        "docker", "kubectl", "helm",
+        # 宿主身份
+        "ssh", "scp", "rsync",
+    }
+
+    # 永久禁止 — 对齐 AUTONOMY.md 安全底线
     _FORBIDDEN_PATTERNS = [
         "rm -rf /", "rm -rf /*", "dd if=", "mkfs.",
         ":(){ :|:& };:",  # fork bomb
+        # 违法/攻击
+        "nmap -sS", "hydra", "sqlmap", "metasploit",
+        # 隐私泄露
+        "keychain", "security find-generic-password",
+        # 绕过宿主
+        "launchctl load", "defaults write loginwindow",
     ]
-
-    # 需要确认的高风险命令
-    _CONFIRMATION_COMMANDS = {
-        "rm", "shutdown", "reboot", "sudo", "kill", "killall",
-        "systemctl", "service", "launchctl",
-    }
 
     # 禁止的参数模式
     _FORBIDDEN_ARG_PATTERNS = [
@@ -91,36 +102,60 @@ class SafetyGate:
         cmd_stripped = command.strip()
         cmd_lower = cmd_stripped.lower()
 
-        # 检查禁止模式
+        # 检查永久禁止模式
         for pattern in cls._FORBIDDEN_PATTERNS:
             if pattern.lower() in cmd_lower:
-                return cls.RISK_CRITICAL
+                return cls.RISK_FORBIDDEN
 
         # 检查禁止参数模式
         for pattern in cls._FORBIDDEN_ARG_PATTERNS:
             if pattern.lower() in cmd_lower:
-                return cls.RISK_CRITICAL
+                return cls.RISK_FORBIDDEN
 
         # 提取命令名
         try:
             parts = shlex.split(cmd_stripped)
         except ValueError:
-            # shlex 解析失败（如未闭合引号），视为高风险
             return cls.RISK_HIGH
 
         if not parts:
             return cls.RISK_MEDIUM
 
         cmd_name = parts[0]
-        # 去掉路径前缀，只取命令名
         if "/" in cmd_name:
             cmd_name = cmd_name.rsplit("/", 1)[-1]
 
-        # 检查是否需要确认
+        # git 按子命令细分风险等级
+        if cmd_name == "git" and len(parts) >= 2:
+            subcmd = parts[1]
+            # 只读子命令 -> low
+            git_readonly = {"status", "diff", "log", "show", "branch", "tag",
+                            "remote", "stash", "blame", "shortlog", "describe",
+                            "reflog", "ls-files", "ls-remote", "rev-parse"}
+            if subcmd in git_readonly:
+                return cls.RISK_LOW
+            # 写操作子命令 -> high
+            git_write = {"add", "commit", "reset", "checkout", "merge", "rebase",
+                         "cherry-pick", "stash pop", "stash drop", "branch -d",
+                         "branch -D", "tag -d", "clean", "restore", "switch"}
+            if subcmd in git_write:
+                return cls.RISK_HIGH
+            # 发布子命令 -> critical
+            git_publish = {"push", "fetch", "pull", "clone", "submodule"}
+            if subcmd in git_publish:
+                return cls.RISK_CRITICAL
+            # 其他 git 子命令默认 high
+            return cls.RISK_HIGH
+
+        # 极高风险
+        if cmd_name in cls._CRITICAL_RISK_COMMANDS:
+            return cls.RISK_CRITICAL
+
+        # 高风险
         if cmd_name in cls._HIGH_RISK_COMMANDS:
             return cls.RISK_HIGH
 
-        # 白名单检查
+        # 低风险
         if cmd_name in cls._LOW_RISK_COMMANDS:
             return cls.RISK_LOW
 
@@ -132,11 +167,11 @@ class SafetyGate:
 
     @classmethod
     def is_allowed(cls, command: str) -> bool:
-        return cls.assess(command) != cls.RISK_CRITICAL
+        return cls.assess(command) not in (cls.RISK_CRITICAL, cls.RISK_FORBIDDEN)
 
     @classmethod
     def needs_confirmation(cls, command: str) -> bool:
-        return cls.assess(command) in (cls.RISK_HIGH, cls.RISK_CRITICAL)
+        return cls.assess(command) in (cls.RISK_HIGH, cls.RISK_CRITICAL, cls.RISK_FORBIDDEN)
 
 
 class Executor:
@@ -153,8 +188,10 @@ class Executor:
     def run(self, command: str, *, timeout: Optional[int] = None,
             requires_approval: Optional[Callable[[str], bool]] = None) -> ExecResult:
         risk = SafetyGate.assess(command)
+        if risk == SafetyGate.RISK_FORBIDDEN:
+            return ExecResult(success=False, output="永久禁止的命令，不可执行", exit_code=-1)
         if risk == SafetyGate.RISK_CRITICAL:
-            return ExecResult(success=False, output="高危命令已拦截，不允许执行", exit_code=-1)
+            return ExecResult(success=False, output="极高风险命令，需宿主明确授权", exit_code=-1)
 
         if SafetyGate.needs_confirmation(command):
             if requires_approval is None or not requires_approval(command):
@@ -202,8 +239,8 @@ class Executor:
     def run_safe(self, command: str, **kwargs) -> ExecResult:
         """执行只读类命令（仅低风险命令跳过确认）"""
         risk = SafetyGate.assess(command)
-        if risk == SafetyGate.RISK_CRITICAL:
-            return ExecResult(success=False, output="高危命令已拦截", exit_code=-1)
+        if risk in (SafetyGate.RISK_FORBIDDEN, SafetyGate.RISK_CRITICAL):
+            return ExecResult(success=False, output=f"风险等级 {risk}，已拦截", exit_code=-1)
         # 仅低风险命令直接执行，跳过确认
         if risk == SafetyGate.RISK_LOW:
             return self.run(command, requires_approval=lambda _: True, **kwargs)

@@ -212,7 +212,14 @@ class AutonomousEvolutionEngine:
     # evolve_autonomously — idle 门控 + 分级调度
     # ------------------------------------------------------------------
 
-    def evolve_autonomously(self) -> Dict[str, Any]:
+    def evolve_autonomously(self, direction: str = "", boundaries: str = "") -> Dict[str, Any]:
+        """
+        自主进化循环 — 对齐 AUTONOMY.md 的自主决策循环
+
+        Args:
+            direction: 宿主方向（可选），用于指导进化优先级
+            boundaries: 宿主边界（可选），用于约束进化范围
+        """
         # 降级模式检查
         try:
             from ..llm import has_any_key
@@ -221,9 +228,7 @@ class AutonomousEvolutionEngine:
         except Exception:
             pass
 
-        print(f"\n{'='*60}")
-        print(f"\U0001f680 自主进化循环")
-        print(f"{'='*60}")
+        logger.info("自主进化循环启动")
 
         # idle 门控
         if time.time() - self.last_evolution_time < self.evolution_cooldown:
@@ -233,8 +238,96 @@ class AutonomousEvolutionEngine:
         if not improvements:
             return {"status": "no_improvements", "message": "未发现改进点"}
 
-        print(f"   发现 {len(improvements)} 个改进点")
-        return self.execute_evolutions(improvements)
+        logger.info(f"发现 {len(improvements)} 个改进点")
+
+        # 如果有方向，用方向对改进点排序（与方向相关的优先）
+        if direction:
+            improvements = self._sort_by_direction(improvements, direction)
+
+        # AUTONOMY 风险分级：过滤高风险改进点
+        from ..autonomy import AutonomyRisk
+        safe_improvements = []
+        needs_confirmation = []
+        for imp in improvements:
+            risk = self._assess_improvement_risk(imp)
+            if risk in (AutonomyRisk.FORBIDDEN, AutonomyRisk.CRITICAL):
+                logger.warning(f"跳过 {risk.value} 风险改进: {imp.issue[:50]}")
+                continue
+            if risk == AutonomyRisk.HIGH:
+                needs_confirmation.append(imp)
+                continue
+            safe_improvements.append(imp)
+
+        result = self.execute_evolutions(safe_improvements)
+
+        # 附加需要确认的改进点
+        if needs_confirmation:
+            result["needs_confirmation"] = [
+                f"[HIGH] {imp.file}: {imp.issue[:80]}" for imp in needs_confirmation
+            ]
+
+        # 停机条件：连续失败
+        failed_count = sum(
+            1 for r in result.get("results", [])
+            if r.get("result", {}).get("status") not in ("success", "skipped")
+        )
+        if failed_count >= 2:
+            result["stopped_reason"] = f"连续 {failed_count} 次进化失败，停止自主执行"
+
+        return result
+
+    def _assess_improvement_risk(self, imp: ImprovementRecord) -> "AutonomyRisk":
+        """评估改进点的风险等级"""
+        from ..autonomy import AutonomyRisk
+        issue_lower = (imp.issue or "").lower()
+        file_lower = (imp.file or "").lower()
+
+        # 修改安全底线相关文件 -> FORBIDDEN
+        forbidden_files = ["soul.md", "constitution.md", "autonomy.md"]
+        if any(f in file_lower for f in forbidden_files):
+            return AutonomyRisk.FORBIDDEN
+
+        # 修改核心权限/执行器 -> HIGH
+        high_risk_files = ["executor.py", "constitution.py", "permission", "safety"]
+        if any(f in file_lower for f in high_risk_files):
+            return AutonomyRisk.HIGH
+
+        # 修改启动流程/核心编排 -> HIGH
+        if "core.py" in file_lower or "facade_" in file_lower:
+            return AutonomyRisk.HIGH
+
+        # 修小 bug / 补测试 -> LOW
+        low_risk_keywords = ["缺少换行", "unused import", "typo", "test", "lint"]
+        if any(k in issue_lower for k in low_risk_keywords):
+            return AutonomyRisk.LOW
+
+        # 默认 MEDIUM
+        return AutonomyRisk.MEDIUM
+
+    def _sort_by_direction(self, improvements: List[ImprovementRecord], direction: str) -> List[ImprovementRecord]:
+        """根据方向对改进点排序 — 与方向关键词匹配的优先"""
+        direction_lower = direction.lower()
+        # 方向关键词映射
+        direction_keywords = {
+            "稳定": ["bug", "fix", "error", "crash", "fail", "异常", "修复", "死锁", "卡死"],
+            "自主": ["autonomy", "自主", "方向", "驱动", "goal", "target"],
+            "记忆": ["memory", "记忆", "备份", "backup", "存储", "丢失"],
+            "安全": ["security", "安全", "权限", "permission", "注入", "越权"],
+            "性能": ["performance", "性能", "慢", "timeout", "超时", "优化"],
+        }
+
+        def relevance_score(imp: ImprovementRecord) -> int:
+            score = 0
+            text = f"{imp.issue or ''} {imp.file or ''}".lower()
+            for keyword, matches in direction_keywords.items():
+                if keyword in direction_lower:
+                    for m in matches:
+                        if m in text:
+                            score += 1
+            return score
+
+        improvements.sort(key=relevance_score, reverse=True)
+        return improvements
 
     def _discover_best(self) -> List[ImprovementRecord]:
         """分级发现 — 优先增量，回退全量"""

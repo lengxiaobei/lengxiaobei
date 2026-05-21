@@ -1,3 +1,13 @@
+"""
+⚠️  LEGACY — 此模块已被 src/hard_boundary.py + src/self_evolution_agent.py 替代。
+
+旧设计：多级权限审批 (auto/approve/deny) + 签名校验 + 人工审核。
+新设计：HardBoundary 三道检查 + 云模型判断 + 宿主确认。
+
+迁移至: src/hard_boundary.py, src/self_evolution_agent.py
+保留原因: 历史参考。
+"""
+
 #!/usr/bin/env python3
 """
 进化权限管理模块
