@@ -1,23 +1,24 @@
 """
-LLM 驱动熔断保护 — 自主 AI Agent 自适应保护
+自适应熔断保护 — 本地规则引擎
 =============================================
 
-核心理念：不再使用硬编码的阈值（80% CPU、80% RAM、5次连续失败），
-而是通过 LLM 提示词根据历史上下文动态评估系统健康状况。
+使用本地规则引擎替代 LLM 调用做熔断决策，避免在系统故障时增加额外负载。
 
 设计原则：
-- 熔断阈值由 LLM 根据历史模式推理
-- 恢复决策由 LLM 评估，不是固定300秒
-- 系统状态判断由 LLM 综合分析
+- 熔断阈值由本地规则引擎根据历史模式快速判断
+- 恢复决策基于时间窗口 + 资源状态，不依赖外部调用
+- 错误分类使用关键词匹配，零延迟
 """
 
 import os
 import time
+import logging
 import psutil
 import json
 from dataclasses import dataclass, field
 from typing import Dict, Optional, List, Callable, Any
-from .llm import chat
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -28,6 +29,10 @@ class CircuitBreakerConfig:
     max_memory_percent: float = 85.0
     recovery_time: int = 180
     check_interval: int = 5
+    # 临时性错误可容忍更多次
+    temp_error_threshold: int = 12
+    # 核心错误应尽早熔断
+    critical_error_threshold: int = 3
 
 
 @dataclass
@@ -40,8 +45,22 @@ class CircuitBreakerState:
     recovery_start_time: Optional[float] = None
 
 
+# 错误分类关键词
+_TEMPORARY_ERRORS = [
+    "503", "429", "rate limit", "rate_limit", "throttl",
+    "timeout", "timed out", "connection reset", "connection refused",
+    "temporary", "retry", "overload", "capacity",
+]
+
+_CRITICAL_ERRORS = [
+    "integrity check failed", "corruption", "data loss",
+    "authentication failed", "unauthorized", "permission denied",
+    "fatal", "panic", "segfault",
+]
+
+
 class CircuitBreaker:
-    """LLM 驱动的自适应熔断保护"""
+    """本地规则引擎驱动的自适应熔断保护"""
 
     def __init__(self, config: Optional[CircuitBreakerConfig] = None):
         self.config = config or CircuitBreakerConfig()
@@ -60,14 +79,19 @@ class CircuitBreaker:
             try:
                 with open(self.state_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                    self.state = CircuitBreakerState(**data)
+                    # 只取 CircuitBreakerState 已知字段，忽略多余字段
+                    known_fields = {f.name for f in CircuitBreakerState.__dataclass_fields__.values()}
+                    filtered = {k: v for k, v in data.items() if k in known_fields}
+                    self.state = CircuitBreakerState(**filtered)
             except Exception:
                 pass
 
     def _save_state(self):
         try:
-            with open(self.state_file, 'w', encoding='utf-8') as f:
+            tmp_path = self.state_file + ".tmp"
+            with open(tmp_path, 'w', encoding='utf-8') as f:
                 json.dump(self.state.__dict__, f, indent=2)
+            os.replace(tmp_path, self.state_file)
         except Exception:
             pass
 
@@ -79,7 +103,7 @@ class CircuitBreaker:
                 return True
             return False
 
-        resource_ok, resource_details = self._check_resources_with_context()
+        resource_ok, resource_details = self._check_resources()
         if not resource_ok:
             self._trip(f"资源使用超限: {resource_details}")
             return False
@@ -104,91 +128,71 @@ class CircuitBreaker:
         self.state.consecutive_failures += 1
         self.state.last_failure_time = time.time()
 
-        should_trip = self._llm_should_trip(error)
-        if should_trip or self.state.consecutive_failures >= self.config.max_consecutive_failures:
+        should_trip = self._should_trip(error)
+        if should_trip:
             self._trip(f"连续失败 {self.state.consecutive_failures} 次: {error[:100]}")
         self._save_state()
 
-    def _check_resources_with_context(self) -> tuple:
-        """检查资源使用并结合上下文评估"""
+    def _classify_error(self, error: str) -> str:
+        """基于关键词分类错误类型"""
+        error_lower = error.lower()
+        for keyword in _CRITICAL_ERRORS:
+            if keyword in error_lower:
+                return "critical"
+        for keyword in _TEMPORARY_ERRORS:
+            if keyword in error_lower:
+                return "temporary"
+        return "normal"
+
+    def _should_trip(self, error: str) -> bool:
+        """本地规则引擎判断是否应触发熔断"""
+        error_type = self._classify_error(error)
+
+        if error_type == "critical":
+            threshold = self.config.critical_error_threshold
+        elif error_type == "temporary":
+            threshold = self.config.temp_error_threshold
+        else:
+            threshold = self.config.max_consecutive_failures
+
+        # 检查近期失败模式：如果同类错误密集出现，降低阈值
+        if len(self._history) >= 3:
+            recent_errors = [
+                h for h in self._history[-5:]
+                if h.get("event") == "failure" and h.get("error", "").lower() in error.lower()
+            ]
+            if len(recent_errors) >= 3:
+                threshold = max(threshold // 2, 1)
+
+        return self.state.consecutive_failures >= threshold
+
+    def _check_resources(self) -> tuple:
+        """检查资源使用"""
         try:
-            cpu = psutil.cpu_percent(interval=0.5)
+            cpu = psutil.cpu_percent(interval=0)
             mem = psutil.virtual_memory()
             disk = psutil.disk_usage('/')
         except Exception:
             return True, "资源检查异常，默认通过"
 
-        # 基础阈值检查
+        # 硬性阈值：必须熔断
         hard_fail = cpu > 95 or mem.percent > 95 or disk.percent > 98
         if hard_fail:
             return False, f"CPU={cpu:.0f}% MEM={mem.percent:.0f}% DISK={disk.percent:.0f}%"
 
+        # 软性阈值：结合失败次数判断
         soft_warn = cpu > self.config.max_cpu_percent or mem.percent > self.config.max_memory_percent
         if soft_warn:
-            should_fail = self._llm_evaluate_resource(cpu, mem.percent, disk.percent)
-            return not should_fail, f"CPU={cpu:.0f}% MEM={mem.percent:.0f}% DISK={disk.percent:.0f}%"
+            # 资源高 + 有失败记录 → 熔断
+            if self.state.consecutive_failures >= 2:
+                return False, f"CPU={cpu:.0f}% MEM={mem.percent:.0f}% + 连续失败"
+            # 资源高但无失败 → 仅警告，不熔断
+            logger.warning(f"资源使用偏高: CPU={cpu:.0f}% MEM={mem.percent:.0f}%")
+
         return True, "ok"
 
-    def _llm_should_trip(self, error: str) -> bool:
-        """通过 LLM 评估连续失败是否应触发熔断"""
-        recent = self._history[-5:] if self._history else []
-        history_text = json.dumps(recent, ensure_ascii=False)
-
-        prompt = f"""你是系统健康监控AI。请评估当前是否应触发熔断保护。
-
-连续失败次数: {self.state.consecutive_failures}
-最大允许次数: {self.config.max_consecutive_failures}
-最新错误: {error[:150]}
-最近事件: {history_text}
-
-请判断是否需要立即熔断。考虑:
-- 如果错误类型是"模型限流(503)"等临时性错误，可以容忍更多次
-- 如果错误是"Integrity check failed"等核心错误，应尽早熔断
-- 如果错误模式有规律（如都是同类错误），可适当放宽
-
-返回JSON:
-{{"should_trip": false, "reasoning": "判断理由"}}
-只返回JSON。"""
-
-        try:
-            response = chat(prompt, system="你是系统健康监控AI。只返回JSON。", temperature=0.1)
-            json_start = response.find('{')
-            json_end = response.rfind('}') + 1
-            if json_start >= 0 and json_end > json_start:
-                data = json.loads(response[json_start:json_end])
-                return data.get("should_trip", self.state.consecutive_failures >= self.config.max_consecutive_failures)
-        except Exception:
-            pass
-
-        return self.state.consecutive_failures >= self.config.max_consecutive_failures
-
-    def _llm_evaluate_resource(self, cpu: float, mem: float, disk: float) -> bool:
-        """通过 LLM 评估资源是否严重到需要熔断"""
-        prompt = f"""评估当前系统资源状态是否严重到需要熔断保护。
-
-CPU: {cpu:.0f}%
-内存: {mem:.0f}%
-磁盘: {disk:.0f}%
-连续失败: {self.state.consecutive_failures}
-
-返回JSON:
-{{"should_trip": false, "reasoning": "评估理由"}}
-只返回JSON。"""
-
-        try:
-            response = chat(prompt, system="你是系统资源评估AI。只返回JSON。", temperature=0.1)
-            json_start = response.find('{')
-            json_end = response.rfind('}') + 1
-            if json_start >= 0 and json_end > json_start:
-                data = json.loads(response[json_start:json_end])
-                return data.get("should_trip", cpu > 90 or mem > 95)
-        except Exception:
-            pass
-
-        return cpu > 90 or mem > 95
-
     def _should_recover(self) -> bool:
-        """通过 LLM 评估是否应该从熔断状态恢复"""
+        """基于时间窗口 + 资源状态判断是否恢复"""
         if not self.state.trip_time:
             return False
 
@@ -198,48 +202,32 @@ CPU: {cpu:.0f}%
         if elapsed < min_recovery:
             return False
 
-        # 超过基础恢复时间后，使用 LLM 评估
+        # 检查资源是否恢复正常
         try:
-            cpu = psutil.cpu_percent(interval=0.3)
+            cpu = psutil.cpu_percent(interval=0)
             mem = psutil.virtual_memory().percent
         except Exception:
             return True
 
-        prompt = f"""评估是否可以从熔断状态恢复。
+        # 资源已降到安全线以下 → 可恢复
+        cpu_safe = cpu < self.config.max_cpu_percent * 0.8
+        mem_safe = mem < self.config.max_memory_percent * 0.8
 
-当前资源: CPU={cpu:.0f}% 内存={mem:.0f}%
-熔断时间: 已持续 {elapsed:.0f} 秒
-基础恢复时间: {min_recovery} 秒
-
-返回JSON:
-{{"should_recover": true, "reasoning": "评估理由"}}
-只返回JSON。"""
-
-        try:
-            response = chat(prompt, system="你是系统恢复评估AI。只返回JSON。", temperature=0.1)
-            json_start = response.find('{')
-            json_end = response.rfind('}') + 1
-            if json_start >= 0 and json_end > json_start:
-                data = json.loads(response[json_start:json_end])
-                return data.get("should_recover", True)
-        except Exception:
-            pass
-
-        return True
+        return cpu_safe and mem_safe
 
     def _attempt_recovery(self):
-        print("[CircuitBreaker] 尝试从熔断状态恢复")
+        logger.info("[CircuitBreaker] 尝试从熔断状态恢复")
         self._reset()
 
     def _trip(self, reason: str):
-        print(f"[CircuitBreaker] 熔断触发: {reason}")
+        logger.warning(f"[CircuitBreaker] 熔断触发: {reason}")
         self.state.is_tripped = True
         self.state.trip_time = time.time()
         self._save_state()
         self._trigger_alert(f"熔断触发: {reason}")
 
     def _reset(self):
-        print("[CircuitBreaker] 熔断状态重置")
+        logger.info("[CircuitBreaker] 熔断状态重置")
         self.state.is_tripped = False
         self.state.trip_time = None
         self.state.consecutive_failures = 0
@@ -261,7 +249,7 @@ CPU: {cpu:.0f}%
 
     def get_health_status(self) -> Dict[str, Any]:
         try:
-            cpu = psutil.cpu_percent(interval=0.1)
+            cpu = psutil.cpu_percent(interval=0)
             mem = psutil.virtual_memory()
             mem_pct = mem.percent
         except Exception:
@@ -269,7 +257,7 @@ CPU: {cpu:.0f}%
             mem_pct = 0
 
         return {
-            "is_healthy": self.check_health(),
+            "is_healthy": not self.state.is_tripped,
             "is_tripped": self.state.is_tripped,
             "consecutive_failures": self.state.consecutive_failures,
             "max_consecutive_failures": self.config.max_consecutive_failures,

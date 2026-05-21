@@ -5,42 +5,10 @@ import logging
 from typing import Dict, Any, Optional
 
 from .. import llm
-from ..config import config_manager
+from ..utils import extract_json
 from .config import Config, _call_claude_code
 
 logger = logging.getLogger(__name__)
-
-
-def extract_json(text: str) -> Dict[str, Any]:
-    """从 LLM 响应中提取 JSON，支持嵌套对象和 markdown fence"""
-    clean = text.strip()
-    if clean.startswith("```json"):
-        clean = clean[7:]
-    elif clean.startswith("```"):
-        clean = clean[3:]
-    if clean.endswith("```"):
-        clean = clean[:-3]
-    clean = clean.strip()
-
-    try:
-        return json.loads(clean)
-    except json.JSONDecodeError:
-        pass
-
-    start = clean.find("{")
-    if start == -1:
-        raise json.JSONDecodeError("No JSON object found", clean, 0)
-
-    depth = 0
-    for i in range(start, len(clean)):
-        if clean[i] == "{":
-            depth += 1
-        elif clean[i] == "}":
-            depth -= 1
-            if depth == 0:
-                return json.loads(clean[start : i + 1])
-
-    raise json.JSONDecodeError("Unclosed JSON object", clean, start)
 
 
 def chat(

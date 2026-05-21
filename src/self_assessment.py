@@ -12,10 +12,14 @@ LLM 驱动的能力评估、错误分析和元认知反思。
 import json
 import os
 import time
+import logging
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from .llm import chat
+from .utils import extract_json, atomic_write_json, load_json
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -171,23 +175,19 @@ class SelfAssessmentSystem:
             (self.abilities_file, self.abilities, Ability),
             (self.errors_file, self.errors, ErrorRecord),
         ]:
-            if os.path.exists(path):
-                try:
-                    with open(path, encoding="utf-8") as f:
-                        data = json.load(f)
-                    if cls == ErrorRecord:
-                        for item in data:
-                            obj = cls.from_dict(item)
+            data = load_json(path, default=[])
+            if isinstance(data, list):
+                for item in data:
+                    try:
+                        obj = cls.from_dict(item)
+                        if cls == ErrorRecord:
                             target[obj.id] = obj
                             if obj.id.isdigit():
-                                self._error_id_counter = max(
-                                    self._error_id_counter, int(obj.id))
-                    else:
-                        for item in data:
-                            obj = cls.from_dict(item)
+                                self._error_id_counter = max(self._error_id_counter, int(obj.id))
+                        else:
                             target[obj.name] = obj
-                except Exception as e:
-                    print(f"[SelfAssessment] 加载失败: {path} - {e}")
+                    except Exception as e:
+                        logger.warning(f"加载失败: {path} - {e}")
 
     def _save(self):
         for path, data in [
@@ -195,10 +195,9 @@ class SelfAssessmentSystem:
             (self.errors_file, [v.to_dict() for v in self.errors.values()]),
         ]:
             try:
-                with open(path, "w", encoding="utf-8") as f:
-                    json.dump(data, f, indent=2, ensure_ascii=False)
+                atomic_write_json(path, data)
             except Exception as e:
-                print(f"[SelfAssessment] 保存失败: {path} - {e}")
+                logger.error(f"保存失败: {path} - {e}")
 
     def _next_error_id(self) -> str:
         self._error_id_counter += 1
@@ -228,7 +227,9 @@ class SelfAssessmentSystem:
         )
         try:
             result = chat(prompt, system="你是一个能力评估引擎，只返回 JSON。")
-            updates = json.loads(self._extract_json(result))
+            updates = extract_json(result)
+            if not isinstance(updates, list):
+                updates = [updates]
             for item in updates:
                 name = item["name"]
                 if name in self.abilities:
@@ -242,7 +243,7 @@ class SelfAssessmentSystem:
             self._save()
             return list(self.abilities.values())
         except Exception as e:
-            print(f"[SelfAssessment] LLM 评估失败: {e}")
+            logger.warning(f"LLM 评估失败: {e}")
             return list(self.abilities.values())
 
     def get_abilities(self) -> List[Ability]:
@@ -281,11 +282,11 @@ class SelfAssessmentSystem:
         )
         try:
             result = chat(prompt, system="你是一个错误分析引擎，只返回 JSON。")
-            analysis = json.loads(self._extract_json(result))
+            analysis = extract_json(result)
             err.root_cause = analysis.get("root_cause", "")
             err.fix_suggestion = analysis.get("fix_suggestion", "")
         except Exception as e:
-            print(f"[SelfAssessment] LLM 错误分析失败: {e}")
+            logger.warning(f"LLM 错误分析失败: {e}")
             err.root_cause = "LLM 分析暂不可用"
 
     def get_errors(self, severity: str = None) -> List[ErrorRecord]:
@@ -329,23 +330,14 @@ class SelfAssessmentSystem:
         )
         try:
             result = chat(prompt, system="你是一个元认知引擎，只返回 JSON。")
-            return json.loads(self._extract_json(result))
+            return extract_json(result)
         except Exception as e:
-            print(f"[SelfAssessment] 元认知反思失败: {e}")
+            logger.warning(f"元认知反思失败: {e}")
             return {
                 "overall_assessment": "无法完成反思",
                 "strengths": [], "weaknesses": [],
                 "learning_priorities": [], "growth_trajectory": "stable",
             }
-
-    # ---- 工具方法 ----
-
-    def _extract_json(self, text: str) -> str:
-        text = text.strip()
-        if text.startswith("```"):
-            lines = text.split("\n")
-            text = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
-        return text
 
     def get_statistics(self) -> dict:
         abilities = list(self.abilities.values())

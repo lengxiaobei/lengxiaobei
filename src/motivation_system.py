@@ -15,10 +15,14 @@ LLM 驱动机系统 — 自主 AI Agent 内在驱动力管理
 import time
 import json
 import os
+import logging
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional
 from enum import Enum
 from .llm import chat
+from .utils import extract_json, atomic_write_json, load_json
+
+logger = logging.getLogger(__name__)
 
 
 class MotivationType(Enum):
@@ -113,45 +117,39 @@ class MotivationSystem:
         self._load_data()
 
     def _load_data(self):
-        if os.path.exists(self.motivations_file):
-            try:
-                with open(self.motivations_file, "r", encoding="utf-8") as f:
-                    for mdata in json.load(f):
-                        m = Motivation.from_dict(mdata)
-                        self.motivations[m.id] = m
-                        if m.id.isdigit():
-                            mid = int(m.id)
-                            if mid > self._motivation_id_counter:
-                                self._motivation_id_counter = mid
-            except Exception as e:
-                print(f"[MotivationSystem] 加载动机失败: {e}")
+        data = load_json(self.motivations_file, default=[])
+        if isinstance(data, list):
+            for mdata in data:
+                try:
+                    m = Motivation.from_dict(mdata)
+                    self.motivations[m.id] = m
+                    if m.id.isdigit():
+                        self._motivation_id_counter = max(self._motivation_id_counter, int(m.id))
+                except Exception as e:
+                    logger.warning(f"加载动机失败: {e}")
 
-        if os.path.exists(self.rewards_file):
-            try:
-                with open(self.rewards_file, "r", encoding="utf-8") as f:
-                    for rdata in json.load(f):
-                        r = Reward.from_dict(rdata)
-                        self.rewards.append(r)
-                        if r.id.isdigit():
-                            rid = int(r.id)
-                            if rid > self._reward_id_counter:
-                                self._reward_id_counter = rid
-            except Exception as e:
-                print(f"[MotivationSystem] 加载奖励失败: {e}")
+        data = load_json(self.rewards_file, default=[])
+        if isinstance(data, list):
+            for rdata in data:
+                try:
+                    r = Reward.from_dict(rdata)
+                    self.rewards.append(r)
+                    if r.id.isdigit():
+                        self._reward_id_counter = max(self._reward_id_counter, int(r.id))
+                except Exception as e:
+                    logger.warning(f"加载奖励失败: {e}")
 
     def _save_data(self):
         try:
             data = [m.to_dict() for m in self.motivations.values()]
-            with open(self.motivations_file, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
+            atomic_write_json(self.motivations_file, data)
         except Exception as e:
-            print(f"[MotivationSystem] 保存动机失败: {e}")
+            logger.error(f"保存动机失败: {e}")
         try:
             data = [r.to_dict() for r in self.rewards]
-            with open(self.rewards_file, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
+            atomic_write_json(self.rewards_file, data)
         except Exception as e:
-            print(f"[MotivationSystem] 保存奖励失败: {e}")
+            logger.error(f"保存奖励失败: {e}")
 
     def _generate_motivation_id(self) -> str:
         self._motivation_id_counter += 1
@@ -171,7 +169,7 @@ class MotivationSystem:
                        related_goals=related_goals or [], history=[], tags=tags or [])
         self.motivations[mid] = m
         self._save_data()
-        print(f"[MotivationSystem] 创建动机: {description} (ID: {mid})")
+        logger.info(f"创建动机: {description} (ID: {mid})")
         return m
 
     def get_motivation(self, motivation_id: str) -> Optional[Motivation]:
@@ -208,7 +206,7 @@ class MotivationSystem:
             m.tags = tags
         m.updated_at = time.time()
         self._save_data()
-        print(f"[MotivationSystem] 更新动机: {m.description} (ID: {motivation_id})")
+        logger.info(f"更新动机: {m.description} (ID: {motivation_id})")
         return m
 
     def delete_motivation(self, motivation_id: str) -> bool:
@@ -217,7 +215,7 @@ class MotivationSystem:
         m = self.motivations[motivation_id]
         del self.motivations[motivation_id]
         self._save_data()
-        print(f"[MotivationSystem] 删除动机: {m.description} (ID: {motivation_id})")
+        logger.info(f"删除动机: {m.description} (ID: {motivation_id})")
         return True
 
     def add_reward(self, reward_type: RewardType, description: str, value: float,
@@ -234,7 +232,7 @@ class MotivationSystem:
                     self.update_motivation(m.id, intensity=new_intensity)
 
         self._save_data()
-        print(f"[MotivationSystem] 添加奖励: {description} (ID: {rid})")
+        logger.info(f"添加奖励: {description} (ID: {rid})")
         return r
 
     def get_rewards(self, reward_type=None, motivation_type=None, goal_id=None) -> List[Reward]:
@@ -314,13 +312,10 @@ class MotivationSystem:
 
         try:
             response = chat(prompt, system="你是动机系统评估AI。只返回JSON。", temperature=0.3)
-            json_start = response.find('{')
-            json_end = response.rfind('}') + 1
-            if json_start >= 0 and json_end > json_start:
-                data = json.loads(response[json_start:json_end])
-                return float(data.get("reward_value", 5.0))
+            data = extract_json(response)
+            return float(data.get("reward_value", 5.0))
         except Exception as e:
-            print(f"[MotivationSystem] LLM评估奖励失败: {e}")
+            logger.warning(f"LLM评估奖励失败: {e}")
 
         return 10.0 if progress >= 100 else (2.0 if progress > 0 else -1.0)
 
@@ -328,7 +323,7 @@ class MotivationSystem:
         """通过 LLM 生成初始动机"""
         existing = self.list_motivations()
         if existing:
-            print("[MotivationSystem] 已存在动机，跳过默认生成")
+            logger.info("已存在动机，跳过默认生成")
             return
 
         prompt = """你是自主AI Agent。请为自己设计一组内在动机，这些动机将驱动你的自主进化行为。
@@ -360,26 +355,23 @@ class MotivationSystem:
 
         try:
             response = chat(prompt, system="你是自主AI Agent，正在为自己设计内在动机系统。只返回JSON。", temperature=0.7)
-            json_start = response.find('{')
-            json_end = response.rfind('}') + 1
-            if json_start >= 0 and json_end > json_start:
-                data = json.loads(response[json_start:json_end])
-                for mdata in data.get("motivations", []):
-                    try:
-                        mtype = MotivationType(mdata["type"])
-                    except (ValueError, KeyError):
-                        continue
-                    self.create_motivation(
-                        motivation_type=mtype,
-                        description=mdata.get("description", f"{mtype.value} 动机"),
-                        intensity=float(mdata.get("intensity", 70.0)),
-                        tags=mdata.get("tags", [])
-                    )
-                if self.motivations:
-                    print(f"[MotivationSystem] LLM生成了 {len(self.motivations)} 个初始动机")
-                    return
+            data = extract_json(response)
+            for mdata in data.get("motivations", []):
+                try:
+                    mtype = MotivationType(mdata["type"])
+                except (ValueError, KeyError):
+                    continue
+                self.create_motivation(
+                    motivation_type=mtype,
+                    description=mdata.get("description", f"{mtype.value} 动机"),
+                    intensity=float(mdata.get("intensity", 70.0)),
+                    tags=mdata.get("tags", [])
+                )
+            if self.motivations:
+                logger.info(f"LLM生成了 {len(self.motivations)} 个初始动机")
+                return
         except Exception as e:
-            print(f"[MotivationSystem] LLM生成默认动机失败: {e}")
+            logger.warning(f"LLM生成默认动机失败: {e}")
 
         # 回退：如果LLM失败，使用合理的默认值
         defaults = {
@@ -432,11 +424,8 @@ class MotivationSystem:
 
         try:
             response = chat(prompt, system="你是动机衰减评估AI。只返回JSON。", temperature=0.1)
-            json_start = response.find('{')
-            json_end = response.rfind('}') + 1
-            if json_start >= 0 and json_end > json_start:
-                data = json.loads(response[json_start:json_end])
-                return float(data.get("decay_rate", 0.1))
+            data = extract_json(response)
+            return float(data.get("decay_rate", 0.1))
         except Exception:
             pass
         return 0.1
@@ -468,11 +457,8 @@ class MotivationSystem:
 
         try:
             response = chat(prompt, system="你是动机变化评估AI。只返回JSON。", temperature=0.5)
-            json_start = response.find('{')
-            json_end = response.rfind('}') + 1
-            if json_start >= 0 and json_end > json_start:
-                data = json.loads(response[json_start:json_end])
-                return float(data.get("variation", 0.0))
+            data = extract_json(response)
+            return float(data.get("variation", 0.0))
         except Exception:
             import random
             return random.uniform(-3.0, 3.0)

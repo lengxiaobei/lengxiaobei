@@ -27,41 +27,92 @@ from .performance import measure_performance
 
 
 # ============================================================================
-# 从 OpenClaw 配置读取 API keys
+# API Key 加载 — 三层优先级: 环境变量 > 项目配置 > OpenClaw 配置
 # ============================================================================
-def _load_openclaw_keys() -> dict:
-    """从 openclaw.json 读取 provider API keys"""
+
+def _load_keys() -> dict:
+    """三层加载 API keys，后加载的覆盖前面的。优先级: env > project config > openclaw"""
+    keys = {}
+
+    # Tier 3: OpenClaw 配置（最低优先级）
     oc_config = os.path.expanduser("~/.openclaw/openclaw.json")
-    if not os.path.exists(oc_config):
-        return {}
+    if os.path.exists(oc_config):
+        try:
+            with open(oc_config) as f:
+                cfg = json.load(f)
+            for name, prov in cfg.get("models", {}).get("providers", {}).items():
+                key = prov.get("apiKey") or prov.get("api_key") or ""
+                if key:
+                    keys[name] = key
+        except Exception:
+            pass
+
+    # Tier 2: 项目配置文件 config/default.yaml
     try:
-        with open(oc_config) as f:
-            cfg = json.load(f)
-        providers = cfg.get("models", {}).get("providers", {})
-        keys = {}
-        for name, prov in providers.items():
-            key = prov.get("apiKey") or prov.get("api_key") or ""
-            if key:
-                keys[name] = key
-        return keys
-    except Exception as e:
-        print(f"[LLM] 加载 OpenClaw 配置失败: {e}")
-        return {}
+        import yaml
+        config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                    "config", "default.yaml")
+        if os.path.exists(config_path):
+            with open(config_path) as f:
+                cfg = yaml.safe_load(f) or {}
+            for name, prov in cfg.get("models", {}).get("providers", {}).items():
+                key = prov.get("api_key", "")
+                if key and key not in ("sk-xxx", "xxx", "YOUR_API_KEY"):
+                    keys[name] = key
+    except Exception:
+        pass
+
+    # Tier 1: 环境变量（最高优先级）
+    env_key = os.environ.get("LLM_API_KEY", "")
+    if env_key:
+        default_provider = os.environ.get("LLM_PROVIDER", "minimax")
+        keys[default_provider] = env_key
+
+    return keys
 
 
-_OPENCLAW_KEYS = _load_openclaw_keys()
-_warned_providers: set = set()  # 每个 provider 缺 key 只警告一次
+def _load_enabled_models() -> List[str]:
+    """从配置文件读取启用的模型列表"""
+    try:
+        import yaml
+        config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                    "config", "default.yaml")
+        if os.path.exists(config_path):
+            with open(config_path) as f:
+                cfg = yaml.safe_load(f) or {}
+            enabled = cfg.get("models", {}).get("enabled", [])
+            if enabled:
+                return enabled
+    except Exception:
+        pass
+    return list(MODELS.keys())  # 全部启用
+
+
+_PROVIDER_KEYS = _load_keys()
+_warned_providers: set = set()
 
 
 def _get_key(provider: str) -> str:
-    """获取 provider API key（从 openclaw.json 读取）。缺 key 时每个 provider 仅警告一次。"""
-    key = _OPENCLAW_KEYS.get(provider, "")
+    """获取 provider API key，缺 key 时每个 provider 仅警告一次。"""
+    key = _PROVIDER_KEYS.get(provider, "")
     if key:
         return key
     if provider not in _warned_providers:
         _warned_providers.add(provider)
         print(f"[LLM] 未找到 provider {provider} 的 API key（仅提示一次）")
     return ""
+
+
+def has_any_key() -> bool:
+    """是否有至少一个可用的 API key"""
+    return any(bool(k) for k in _PROVIDER_KEYS.values())
+
+
+def reload_keys():
+    """重新加载 API keys（配置变更后调用）"""
+    global _PROVIDER_KEYS, _warned_providers
+    _PROVIDER_KEYS = _load_keys()
+    _warned_providers = set()
 
 
 # ============================================================================
@@ -505,6 +556,9 @@ def get_candidate_models(prompt: str) -> Tuple[List[str], List[str]]:
 # 缓存机制 - 减少重复调用
 # ============================================================================
 
+import threading as _threading
+
+_response_cache_lock = _threading.Lock()
 _response_cache: Dict[str, Dict[str, Any]] = {}
 """简单的内存缓存，key = (model + hash(prompt + system))"""
 
@@ -516,33 +570,34 @@ def _get_cache_key(model: str, prompt: str, system: Optional[str]) -> str:
     content = f"{model}:{prompt}"
     if system:
         content += f":{system}"
-    return hashlib.md5(content.encode('utf-8')).hexdigest()
+    return hashlib.sha256(content.encode('utf-8')).hexdigest()
 
 def get_cached_response(model: str, prompt: str, system: Optional[str]) -> Optional[str]:
     """获取缓存响应"""
     key = _get_cache_key(model, prompt, system)
-    if key in _response_cache:
-        entry = _response_cache[key]
-        # 检查缓存是否过期（1小时过期）
-        if time.time() - entry["timestamp"] > 3600:
-            del _response_cache[key]
-            return None
-        print(f"[LLM] 使用缓存响应: {model}")
-        return entry["content"]
+    with _response_cache_lock:
+        if key in _response_cache:
+            entry = _response_cache[key]
+            # 检查缓存是否过期（1小时过期）
+            if time.time() - entry["timestamp"] > 3600:
+                del _response_cache[key]
+                return None
+            return entry["content"]
     return None
 
 def cache_response(model: str, prompt: str, system: Optional[str], content: str):
     """缓存响应"""
-    # 如果缓存满了，删除最旧的
-    if len(_response_cache) >= MAX_CACHE_SIZE:
-        oldest_key = min(_response_cache.keys(), key=lambda k: _response_cache[k]["timestamp"])
-        del _response_cache[oldest_key]
-    
-    key = _get_cache_key(model, prompt, system)
-    _response_cache[key] = {
-        "content": content,
-        "timestamp": time.time(),
-    }
+    with _response_cache_lock:
+        # 如果缓存满了，删除最旧的
+        if len(_response_cache) >= MAX_CACHE_SIZE:
+            oldest_key = min(_response_cache.keys(), key=lambda k: _response_cache[k]["timestamp"])
+            del _response_cache[oldest_key]
+
+        key = _get_cache_key(model, prompt, system)
+        _response_cache[key] = {
+            "content": content,
+            "timestamp": time.time(),
+        }
 
 # ============================================================================
 # LLM 调用

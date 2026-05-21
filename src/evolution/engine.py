@@ -213,6 +213,14 @@ class AutonomousEvolutionEngine:
     # ------------------------------------------------------------------
 
     def evolve_autonomously(self) -> Dict[str, Any]:
+        # 降级模式检查
+        try:
+            from ..llm import has_any_key
+            if not has_any_key():
+                return {"status": "degraded", "message": "LLM 不可用，跳过自主进化"}
+        except Exception:
+            pass
+
         print(f"\n{'='*60}")
         print(f"\U0001f680 自主进化循环")
         print(f"{'='*60}")

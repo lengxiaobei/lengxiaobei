@@ -21,6 +21,8 @@ _MODULE_MAP = {
     "Memory": "memory",
     "chat": "llm",
     "route": "llm",
+    "has_any_key": "llm",
+    "reload_keys": "llm",
     "model_status": "llm",
     "Constitution": "constitution",
     "get_constitution": "constitution",
@@ -219,18 +221,9 @@ _MODULE_MAP = {
 
     # Error Handling (精简后已移除 error_handling 模块)
 
-    # Model Router / JSON Schema / SDK Status / Debug / Performance
-    "ModelInfo": "model_router",
-    "ModelRoute": "model_router",
-    "ModelRouterConfig": "model_router",
-    "ModelRouter": "model_router",
-    "create_model_router": "model_router",
-    "route_model": "model_router",
-    "get_model_info": "model_router",
-    "create_model_info": "model_router",
-    "create_model_route": "model_router",
-    "DEFAULT_MODELS": "model_router",
-    "DEFAULT_ROUTES": "model_router",
+    # Model Router 已移除，统一使用 llm.route() / llm.classify_task()
+
+    # JSON Schema / SDK Status / Debug / Performance
     "SchemaValidationResult": "json_schema",
     "SchemaConfig": "json_schema",
     "JsonSchemaValidator": "json_schema",

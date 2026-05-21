@@ -50,11 +50,41 @@ class LengXiaobei:
 
         self.running = False
         self.initialized = True
+        self._degraded = False
+        self._degraded_reason = ""
 
         if not memory_only:
             self._eager_init()
 
+        # 检查 LLM 可用性
+        self._check_llm_availability()
+
         print(f"[Core] LengXiaobei 初始化完成")
+
+    def _check_llm_availability(self):
+        """检查 LLM 是否可用，不可用时进入降级模式"""
+        try:
+            from .llm import has_any_key
+            from .health_check import HealthCheckService
+            if not has_any_key():
+                self._degraded = True
+                self._degraded_reason = "未配置 LLM API Key"
+                HealthCheckService.set_degraded(self._degraded_reason)
+                print(f"[Core] ⚠️  进入降级模式: {self._degraded_reason}")
+                print(f"[Core]    自治进化、LLM 宪法检查、知识提炼将暂停")
+                print(f"[Core]    本地功能（监控、记忆、诊断）正常运行")
+            else:
+                print(f"[Core] ✅ LLM 可用，全功能模式")
+        except Exception:
+            pass
+
+    @property
+    def degraded(self) -> bool:
+        return self._degraded
+
+    @property
+    def degraded_reason(self) -> str:
+        return self._degraded_reason
 
     def _eager_init(self):
         for label, prop in [

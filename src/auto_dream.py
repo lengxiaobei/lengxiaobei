@@ -59,7 +59,7 @@ class ConsolidationLock:
         """获取上次整理时间"""
         lock_info = self.lock.get_lock_info()
         if lock_info:
-            return lock_info.get('acquired_at', 0)
+            return lock_info.get('acquired_at') or 0
         return 0
     
     async def try_acquire(self) -> Optional[float]:

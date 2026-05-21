@@ -29,6 +29,14 @@ evolution:
   timeout: 60
   auto_commit: false
 
+# 自主运行配置
+autonomous:
+  enabled: true                 # 是否允许自主进化
+  cooldown_seconds: 600         # 进化冷却时间
+  max_per_cycle: 3              # 每次最多执行几个改进
+  degraded_mode: "observe"      # LLM 不可用时的行为: observe(仅观察记录) | skip(跳过) | error(报错)
+  idle_threshold_seconds: 300   # 空闲多久后允许自主巡检
+
 # 日志配置
 logging:
   level: "INFO"
@@ -62,11 +70,32 @@ security:
     window_seconds: 60
 
 # 模型配置
-model:
-  default: "claude-3-opus-20240229"
-  fallback: "claude-3-sonnet-20240229"
+models:
+  # API Key 读取顺序: 环境变量 → 本文件 providers → ~/.openclaw/openclaw.json
+  providers:
+    # minimax:
+    #   api_key: "sk-xxx"
+    # volcengine:
+    #   api_key: "xxx"
+    # bailian:
+    #   api_key: "xxx"
+    # anthropic:
+    #   api_key: "sk-ant-xxx"
+
+  # 启用的模型列表（注释即禁用）
+  enabled:
+    - "minimax/MiniMax-M2.7"
+    - "volcengine/doubao-seed-2.0-pro"
+    - "volcengine/deepseek-v3.2"
+    - "bailian/qwen3.5-plus"
+    - "bailian/qwen3-coder-plus"
+
+  # 全局参数
+  default: "minimax/MiniMax-M2.7"
   temperature: 0.7
   max_tokens: 4096
+  timeout: 120
+  max_retries: 2
 
 # 工具配置
 tools:

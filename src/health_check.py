@@ -35,7 +35,8 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
         response = {
             "status": "healthy" if all(component["status"] == "healthy" for component in health_status) else "unhealthy",
             "timestamp": time.time(),
-            "components": health_status
+            "components": health_status,
+            "degraded": HealthCheckService.is_degraded(),
         }
         
         self.wfile.write(json.dumps(response, indent=2).encode('utf-8'))
@@ -53,6 +54,23 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
 
 class HealthCheckService:
     """健康检查服务"""
+
+    _degraded = False
+    _degraded_reason = ""
+
+    @classmethod
+    def set_degraded(cls, reason: str = ""):
+        cls._degraded = True
+        cls._degraded_reason = reason
+
+    @classmethod
+    def clear_degraded(cls):
+        cls._degraded = False
+        cls._degraded_reason = ""
+
+    @classmethod
+    def is_degraded(cls) -> bool:
+        return cls._degraded
     
     # 组件健康状态
     _component_status = {

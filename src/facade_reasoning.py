@@ -1,11 +1,11 @@
 """
 推理系统 Facade — 懒加载查询引擎、工具、技能、模型路由等
 
-含: query_engine, tool_registry, tool_builder, skill_manager, integration_manager, model_router
+含: query_engine, tool_registry, tool_builder, skill_manager, integration_manager
+模型路由统一使用 llm.route()
 """
 
 from pathlib import Path
-from typing import Optional
 
 
 class ReasoningFacade:
@@ -76,8 +76,8 @@ class ReasoningFacade:
 
     @property
     def model_router(self):
+        """模型路由 — 委托给 llm.route()，返回路由模块"""
         if self._model_router is None:
-            from .model_router import create_model_router
-
-            self._model_router = create_model_router()
+            from . import llm
+            self._model_router = llm
         return self._model_router

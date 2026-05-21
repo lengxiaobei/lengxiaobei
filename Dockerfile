@@ -34,12 +34,12 @@ ENV LENGXIAOBEI_ROOT=/app
 ENV PYTHONUNBUFFERED=1
 ENV LOG_LEVEL=INFO
 
-# Expose ports
-EXPOSE 8000 8080 8081 8082
+# Expose ports (health check on 8000, web API if enabled)
+EXPOSE 8000 8080
 
-# Health check (health_check.py defaults to port 8000)
+# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
 
 # Default command: run as daemon
 CMD ["python", "-m", "src.core"]

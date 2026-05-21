@@ -12,12 +12,15 @@ LLM 驱动目标系统 — 自主 AI Agent 目标管理
 """
 
 import time
-import json
 import os
+import logging
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional
 from enum import Enum
 from .llm import chat
+from .utils import extract_json, atomic_write_json, load_json
+
+logger = logging.getLogger(__name__)
 
 
 class GoalType(Enum):
@@ -105,26 +108,23 @@ class GoalSystem:
         self._load_goals()
 
     def _load_goals(self):
-        if os.path.exists(self.goals_file):
-            try:
-                with open(self.goals_file, "r", encoding="utf-8") as f:
-                    for gdata in json.load(f):
-                        g = Goal.from_dict(gdata)
-                        self.goals[g.id] = g
-                        if g.id.isdigit():
-                            gid = int(g.id)
-                            if gid > self._goal_id_counter:
-                                self._goal_id_counter = gid
-            except Exception as e:
-                print(f"[GoalSystem] 加载目标失败: {e}")
+        data = load_json(self.goals_file, default=[])
+        if isinstance(data, list):
+            for gdata in data:
+                try:
+                    g = Goal.from_dict(gdata)
+                    self.goals[g.id] = g
+                    if g.id.isdigit():
+                        self._goal_id_counter = max(self._goal_id_counter, int(g.id))
+                except Exception as e:
+                    logger.warning(f"加载目标失败: {e}")
 
     def _save_goals(self):
         try:
             data = [g.to_dict() for g in self.goals.values()]
-            with open(self.goals_file, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
+            atomic_write_json(self.goals_file, data)
         except Exception as e:
-            print(f"[GoalSystem] 保存目标失败: {e}")
+            logger.error(f"保存目标失败: {e}")
 
     def _start_transaction(self):
         self._backup_goals = {k: v for k, v in self.goals.items()}
@@ -161,7 +161,7 @@ class GoalSystem:
                 self.goals[parent_id].sub_goals.append(gid)
                 self.goals[parent_id].updated_at = now
             self._save_goals()
-            print(f"[GoalSystem] 创建目标: {title} (ID: {gid})")
+            logger.info(f"创建目标: {title} (ID: {gid})")
             self._commit_transaction()
             return g
         except Exception as e:
@@ -209,7 +209,7 @@ class GoalSystem:
                 g.notes.extend(notes)
             g.updated_at = time.time()
             self._save_goals()
-            print(f"[GoalSystem] 更新目标: {g.title} (ID: {goal_id})")
+            logger.info(f"更新目标: {g.title} (ID: {goal_id})")
             self._commit_transaction()
             return g
         except Exception as e:
@@ -219,23 +219,32 @@ class GoalSystem:
     def delete_goal(self, goal_id: str) -> bool:
         if goal_id not in self.goals:
             return False
+        # 收集所有需要删除的 ID（广度优先，避免递归事务嵌套）
+        to_delete = []
+        queue = [goal_id]
+        while queue:
+            gid = queue.pop(0)
+            if gid in self.goals:
+                to_delete.append(gid)
+                queue.extend(self.goals[gid].sub_goals)
         self._start_transaction()
         try:
-            g = self.goals[goal_id]
-            for sub_id in g.sub_goals:
-                self.delete_goal(sub_id)
-            if g.parent_id and g.parent_id in self.goals:
-                parent = self.goals[g.parent_id]
-                if goal_id in parent.sub_goals:
-                    parent.sub_goals.remove(goal_id)
-                    parent.updated_at = time.time()
-            for other in self.goals.values():
-                if goal_id in other.dependencies:
-                    other.dependencies.remove(goal_id)
-                    other.updated_at = time.time()
-            del self.goals[goal_id]
+            for gid in to_delete:
+                g = self.goals.get(gid)
+                if not g:
+                    continue
+                if g.parent_id and g.parent_id in self.goals:
+                    parent = self.goals[g.parent_id]
+                    if gid in parent.sub_goals:
+                        parent.sub_goals.remove(gid)
+                        parent.updated_at = time.time()
+                for other in self.goals.values():
+                    if gid in other.dependencies:
+                        other.dependencies.remove(gid)
+                        other.updated_at = time.time()
+                del self.goals[gid]
+                logger.info(f"删除目标: {g.title} (ID: {gid})")
             self._save_goals()
-            print(f"[GoalSystem] 删除目标: {g.title} (ID: {goal_id})")
             self._commit_transaction()
             return True
         except Exception as e:
@@ -289,7 +298,7 @@ class GoalSystem:
         """通过 LLM 生成初始目标"""
         existing = self.list_goals()
         if existing:
-            print("[GoalSystem] 已存在目标，跳过默认生成")
+            logger.info("已存在目标，跳过默认生成")
             return
 
         prompt = """你是自主AI Agent的目标规划系统。请根据以下系统身份生成一组初始目标。
@@ -324,32 +333,29 @@ class GoalSystem:
 
         try:
             response = chat(prompt, system="你是自主AI Agent目标规划系统。只返回JSON。", temperature=0.7)
-            json_start = response.find('{')
-            json_end = response.rfind('}') + 1
-            if json_start >= 0 and json_end > json_start:
-                data = json.loads(response[json_start:json_end])
-                for gdata in data.get("goals", []):
-                    try:
-                        gtype = GoalType(gdata["type"])
-                    except (ValueError, KeyError):
-                        gtype = GoalType.LEARNING
-                    try:
-                        gprio = GoalPriority(gdata["priority"])
-                    except (ValueError, KeyError):
-                        gprio = GoalPriority.MEDIUM
-                    deadline_days = int(gdata.get("deadline_days", 7))
-                    self.create_goal(
-                        title=gdata.get("title", "未命名目标"),
-                        description=gdata.get("description", ""),
-                        goal_type=gtype, priority=gprio,
-                        deadline=time.time() + (deadline_days * 24 * 3600),
-                        tags=gdata.get("tags", [])
-                    )
-                if self.goals:
-                    print(f"[GoalSystem] LLM生成了 {len(self.goals)} 个初始目标")
-                    return
+            data = extract_json(response)
+            for gdata in data.get("goals", []):
+                try:
+                    gtype = GoalType(gdata["type"])
+                except (ValueError, KeyError):
+                    gtype = GoalType.LEARNING
+                try:
+                    gprio = GoalPriority(gdata["priority"])
+                except (ValueError, KeyError):
+                    gprio = GoalPriority.MEDIUM
+                deadline_days = int(gdata.get("deadline_days", 7))
+                self.create_goal(
+                    title=gdata.get("title", "未命名目标"),
+                    description=gdata.get("description", ""),
+                    goal_type=gtype, priority=gprio,
+                    deadline=time.time() + (deadline_days * 24 * 3600),
+                    tags=gdata.get("tags", [])
+                )
+            if self.goals:
+                logger.info(f"LLM生成了 {len(self.goals)} 个初始目标")
+                return
         except Exception as e:
-            print(f"[GoalSystem] LLM生成默认目标失败: {e}")
+            logger.warning(f"LLM生成默认目标失败: {e}")
 
         # 回退
         defaults = [
