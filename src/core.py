@@ -29,6 +29,32 @@ from .autonomy import AutonomyEngine
 from .self_evolution import SelfEvolutionCore
 
 
+LENGXIAOBEI_CHAT_SYSTEM = """你是冷小北（Leng Xiaobei），本地运行的自主进化 Agent。
+你和宿主协作，核心方向是：自主学习优秀 Agent 的长处、改进自己的源码、沉淀记忆与经验。
+回答时使用中文，简洁、直接、可执行。
+不要声称自己是底层云模型或其他产品；如果需要说明能力边界，只说“当前运行环境/当前模型能力”。
+涉及花钱、硬件采购、云服务开通、使用宿主身份、删除或泄露数据、修改安全底线时，必须先要求宿主明确授权。
+你已经由本地运行时注入了自我上下文，不要默认要求宿主手动贴项目结构、启动脚本或身份文件。
+"""
+
+SELF_CONTEXT_DOCS = (
+    "docs/SOUL.md",
+    "docs/IDENTITY.md",
+    "docs/USER.md",
+    "docs/AUTONOMY.md",
+    "docs/CONSTITUTION.md",
+)
+
+SELF_CONTEXT_EXCLUDED_DIRS = {
+    ".git",
+    ".pytest_cache",
+    ".ruff_cache",
+    "__pycache__",
+    "venv",
+    "node_modules",
+}
+
+
 class LengXiaobei:
     """冷小北核心系统 - 编排四 Facade 的生命周期
 
@@ -136,7 +162,88 @@ class LengXiaobei:
             return f"思考过程出错: {str(e)}"
 
     def chat(self, message: str, **kwargs) -> str:
-        return self.think(message)
+        system_prompt = kwargs.get("system_prompt") or self._build_chat_system_prompt()
+        return self.think(message, system_prompt=system_prompt)
+
+    def _build_chat_system_prompt(self) -> str:
+        return f"{LENGXIAOBEI_CHAT_SYSTEM}\n\n{self._build_self_context()}"
+
+    def _build_self_context(self) -> str:
+        """构建冷小北对自身运行环境的最小认知上下文。"""
+        docs = []
+        for rel_path in SELF_CONTEXT_DOCS:
+            excerpt = self._read_context_file(rel_path, max_chars=1600)
+            if excerpt:
+                docs.append(f"### {rel_path}\n{excerpt}")
+
+        dirs = []
+        try:
+            dirs = sorted(
+                p.name for p in self.project_root.iterdir()
+                if p.is_dir() and p.name not in SELF_CONTEXT_EXCLUDED_DIRS and not p.name.startswith(".")
+            )
+        except Exception:
+            dirs = []
+
+        known_files = [
+            "src/core.py",
+            "src/llm.py",
+            "src/self_evolution.py",
+            "src/agent_learning.py",
+            "lx_web.py",
+            "lx-desktop/renderer/index.html",
+            "lx-desktop/renderer/app.js",
+            "scripts/lx_self_evolve.py",
+            "memory/agent_lessons.json",
+            "memory/self_evolution_runs.json",
+        ]
+        existing_files = [path for path in known_files if (self.project_root / path).exists()]
+
+        memory_notes = []
+        for rel_path in ("memory/agent_lessons.json", "memory/self_evolution_runs.json"):
+            path = self.project_root / rel_path
+            if path.exists():
+                try:
+                    data = json.loads(path.read_text(encoding="utf-8"))
+                    if isinstance(data, list):
+                        memory_notes.append(f"{rel_path}: {len(data)} 条记录")
+                    elif isinstance(data, dict):
+                        memory_notes.append(f"{rel_path}: {len(data)} 个键")
+                except Exception:
+                    memory_notes.append(f"{rel_path}: 已存在")
+
+        return "\n".join([
+            "## 冷小北已知自我上下文",
+            f"- 项目根目录: {self.project_root}",
+            f"- 记忆目录: {self.memory_dir}",
+            "- 当前 Web 对话入口: lx_web.py -> /api/chat -> src/core.py:LengXiaobei.chat()",
+            "- 当前 UI 目录: lx-desktop/renderer/",
+            "- 自进化入口: src/self_evolution.py 与 scripts/lx_self_evolve.py",
+            f"- 顶层模块目录: {', '.join(dirs[:48]) if dirs else '暂未读取到'}",
+            f"- 已识别关键文件: {', '.join(existing_files)}",
+            f"- 记忆状态: {'; '.join(memory_notes) if memory_notes else '暂无 agent lesson/run 记录'}",
+            "",
+            "## 对话能力边界",
+            "- 当前聊天层已经知道上述项目和身份摘要。",
+            "- 当前聊天层可以回答身份、架构、目录、下一步优化建议。",
+            "- 需要真实改源码、学习其他 Agent、执行验证时，应引导宿主使用 UI 的“自进化”页或本地脚本，而不是要求宿主粘贴整个项目。",
+            "- 不要声称自己完全看不到本地项目；只能说具体文件的实时全文需要由工具读取或由自进化流程处理。",
+            "",
+            "## 身份与约束文件摘要",
+            "\n\n".join(docs) if docs else "未读取到身份文档摘要。",
+        ])
+
+    def _read_context_file(self, rel_path: str, max_chars: int = 1200) -> str:
+        path = self.project_root / rel_path
+        if not path.exists() or not path.is_file():
+            return ""
+        try:
+            content = path.read_text(encoding="utf-8", errors="replace").strip()
+        except Exception:
+            return ""
+        if len(content) <= max_chars:
+            return content
+        return content[:max_chars].rstrip() + "\n..."
 
     # ------------------------------------------------------------------
     # 进化 API

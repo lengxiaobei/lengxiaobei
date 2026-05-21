@@ -39,6 +39,14 @@ _system_info = {
     "version": "Phase 2.1",
 }
 
+IDENTITY_DOCS = [
+    "docs/SOUL.md",
+    "docs/IDENTITY.md",
+    "docs/USER.md",
+    "docs/AUTONOMY.md",
+    "docs/CONSTITUTION.md",
+]
+
 # ---------------------------------------------------------------------------
 # 延迟初始化 Agent（避免启动时加载所有模块）
 # ---------------------------------------------------------------------------
@@ -54,6 +62,106 @@ def _get_agent():
             print(f"[lx_web] Agent 初始化失败: {e}")
             _agent = None
     return _agent
+
+
+def _read_excerpt(rel_path: str, limit: int = 900) -> str:
+    path = PROJECT_ROOT / rel_path
+    if not path.exists() or not path.is_file():
+        return ""
+    try:
+        content = path.read_text(encoding="utf-8", errors="replace").strip()
+    except Exception:
+        return ""
+    if len(content) <= limit:
+        return content
+    return content[:limit].rstrip() + "\n..."
+
+
+def _records_summary(rel_path: str) -> dict:
+    path = PROJECT_ROOT / rel_path
+    data = load_json(str(path), default=[])
+    if isinstance(data, list):
+        latest = data[-1] if data else None
+        return {"path": rel_path, "count": len(data), "latest": latest}
+    if isinstance(data, dict):
+        return {"path": rel_path, "count": len(data), "latest": None}
+    return {"path": rel_path, "count": 0, "latest": None}
+
+
+def _agent_context(agent=None) -> dict:
+    docs = []
+    for rel_path in IDENTITY_DOCS:
+        excerpt = _read_excerpt(rel_path)
+        docs.append({
+            "path": rel_path,
+            "exists": bool(excerpt),
+            "excerpt": excerpt,
+        })
+
+    top_dirs = []
+    try:
+        ignored = {".git", "venv", "__pycache__", ".pytest_cache", ".ruff_cache"}
+        top_dirs = sorted(
+            p.name for p in PROJECT_ROOT.iterdir()
+            if p.is_dir() and p.name not in ignored and not p.name.startswith(".")
+        )
+    except Exception:
+        top_dirs = []
+
+    key_files = [
+        "src/core.py",
+        "src/llm.py",
+        "src/self_evolution.py",
+        "src/agent_learning.py",
+        "lx_web.py",
+        "lx-desktop/renderer/index.html",
+        "lx-desktop/renderer/app.js",
+        "scripts/lx_self_evolve.py",
+    ]
+
+    degraded = bool(getattr(agent, "degraded", False)) if agent else False
+    degraded_reason = getattr(agent, "degraded_reason", "") if agent else ""
+
+    return {
+        "identity": {
+            "name": "冷小北",
+            "host": "潘豪",
+            "role": "本地自主进化 Agent / 数字共生体",
+            "version": _system_info["version"],
+        },
+        "runtime": {
+            "project_root": str(PROJECT_ROOT),
+            "memory_dir": str(PROJECT_ROOT / "memory"),
+            "web_entry": "lx_web.py",
+            "chat_route": "POST /api/chat",
+            "self_evolution_entry": "src/self_evolution.py",
+            "degraded": degraded,
+            "degraded_reason": degraded_reason,
+        },
+        "capabilities": [
+            {"name": "对话", "status": "active", "endpoint": "POST /api/chat"},
+            {"name": "学习 Agent 长处", "status": "active", "endpoint": "POST /api/learn-agent"},
+            {"name": "自进化源码改进", "status": "active", "endpoint": "POST /api/self-evolve"},
+            {"name": "经验沉淀", "status": "active", "endpoint": "GET /api/lessons"},
+            {"name": "运行记录", "status": "active", "endpoint": "GET /api/runs"},
+        ],
+        "boundaries": [
+            "不自主修改 docs/SOUL.md / docs/CONSTITUTION.md 的安全底线",
+            "产生费用、采购、开通云服务、使用宿主身份必须先获授权",
+            "不删除、篡改、泄露核心记忆",
+            "自进化应保留验证记录与回滚路径",
+        ],
+        "key_files": [
+            {"path": path, "exists": (PROJECT_ROOT / path).exists()}
+            for path in key_files
+        ],
+        "top_dirs": top_dirs[:64],
+        "memory": {
+            "lessons": _records_summary("memory/agent_lessons.json"),
+            "runs": _records_summary("memory/self_evolution_runs.json"),
+        },
+        "docs": docs,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -73,6 +181,7 @@ def index():
             "chat": "POST /api/chat",
             "status": "GET /api/status",
             "health": "GET /api/health",
+            "agent_context": "GET /api/agent-context",
             "evolution": "POST /api/evolution",
             "self_evolve": "POST /api/self-evolve",
             "lessons": "GET /api/lessons",
@@ -123,6 +232,24 @@ def api_health():
         return jsonify({"status": "unhealthy", "components": components}), 503
     components["core"] = "healthy"
     return jsonify({"status": "healthy", "components": components})
+
+
+@app.route("/api/agent-context", methods=["GET"])
+def api_agent_context():
+    agent = _get_agent()
+    health = "healthy" if agent is not None else "unhealthy"
+    context = _agent_context(agent)
+    context["health"] = {
+        "status": health,
+        "components": {
+            "web": "healthy",
+            "core": health,
+        },
+        "uptime": int(time.time() - _system_info["start_time"]),
+    }
+    code = 200 if agent is not None else 503
+    return jsonify({"status": "ok" if agent is not None else "failed", "context": context}), code
+
 
 @app.route("/api/chat", methods=["POST"])
 def api_chat():

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>冷小北 · 自进化</title>
+  <title>冷小北 · Agent 工作台</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -13,88 +13,153 @@
         <div class="brand-mark">LX</div>
         <div>
           <h1>冷小北</h1>
-          <p>Self-Evolution MVP</p>
+          <p id="identity-role">本地自主进化 Agent</p>
         </div>
       </div>
 
+      <div class="status-card">
+        <div class="status-row">
+          <span class="status-dot" id="health-dot"></span>
+          <strong id="health-label">连接中</strong>
+        </div>
+        <p id="runtime-path">正在同步运行环境...</p>
+      </div>
+
       <nav class="nav">
-        <button class="nav-btn active" data-view="evolve">自进化</button>
-        <button class="nav-btn" data-view="lessons">Lessons</button>
-        <button class="nav-btn" data-view="runs">Runs</button>
-        <button class="nav-btn" data-view="status">状态</button>
+        <button class="nav-btn active" data-view="chat">对话工作台</button>
+        <button class="nav-btn" data-view="evolve">自进化</button>
+        <button class="nav-btn" data-view="memory">记忆与记录</button>
+        <button class="nav-btn" data-view="system">系统上下文</button>
       </nav>
+
+      <div class="side-metrics">
+        <div>
+          <span>Lessons</span>
+          <strong id="metric-lessons">0</strong>
+        </div>
+        <div>
+          <span>Runs</span>
+          <strong id="metric-runs">0</strong>
+        </div>
+      </div>
     </aside>
 
     <main class="main">
-      <section class="topbar">
+      <header class="topbar">
         <div>
-          <h2 id="view-title">自进化控制台</h2>
-          <p id="view-subtitle">学习其他 Agent 的长处，转成一次小步源码改进。</p>
+          <p class="eyebrow">Leng Xiaobei Control Surface</p>
+          <h2 id="view-title">对话工作台</h2>
+          <p id="view-subtitle">对话、身份上下文、运行状态使用同一份后端事实源。</p>
         </div>
-        <button id="refresh-btn" class="icon-btn" title="刷新">↻</button>
+        <button id="refresh-btn" class="icon-btn" title="同步后端状态">↻</button>
+      </header>
+
+      <section id="chat" class="view active">
+        <div class="workspace-grid">
+          <div class="chat-panel">
+            <div id="chat-log" class="chat-log" aria-live="polite">
+              <div class="chat-message agent">
+                <div class="message-role">冷小北</div>
+                <div class="message-body">我在。本地身份、项目路径、记忆目录和自进化入口已经同步给我了。你可以直接下方向，也可以问我现在知道自己什么。</div>
+              </div>
+            </div>
+
+            <div class="chat-compose">
+              <textarea id="chat-input" rows="3" placeholder="输入方向或问题，Enter 发送，Shift+Enter 换行"></textarea>
+              <button id="send-chat-btn" class="primary-btn">发送</button>
+            </div>
+          </div>
+
+          <aside class="context-rail">
+            <section class="panel">
+              <div class="panel-head">
+                <h3>自我上下文</h3>
+                <span id="sync-state" class="pill">syncing</span>
+              </div>
+              <dl class="facts">
+                <div><dt>项目</dt><dd id="fact-root">-</dd></div>
+                <div><dt>记忆</dt><dd id="fact-memory">-</dd></div>
+                <div><dt>对话入口</dt><dd id="fact-chat">-</dd></div>
+                <div><dt>自进化</dt><dd id="fact-evolution">-</dd></div>
+              </dl>
+            </section>
+
+            <section class="panel">
+              <h3>能力开关</h3>
+              <div id="capability-list" class="capability-list"></div>
+            </section>
+
+            <section class="panel">
+              <h3>安全边界</h3>
+              <ul id="boundary-list" class="rules compact"></ul>
+            </section>
+          </aside>
+        </div>
       </section>
 
-      <section id="evolve" class="view active">
-        <div class="panel command-panel">
-          <label for="topic">学习方向</label>
-          <textarea id="topic" rows="4" placeholder="例如：学习 Claude Code 的任务规划能力"></textarea>
+      <section id="evolve" class="view">
+        <div class="evolve-grid">
+          <div class="panel command-panel">
+            <div class="panel-head">
+              <h3>方向驱动自进化</h3>
+              <span id="run-state" class="pill">idle</span>
+            </div>
+            <label for="topic">学习方向</label>
+            <textarea id="topic" rows="5" placeholder="例如：学习 OpenHands 的任务拆解能力，并把适合冷小北的部分沉淀到源码"></textarea>
 
-          <label for="url">参考 URL（可选）</label>
-          <input id="url" type="url" placeholder="https://github.com/All-Hands-AI/OpenHands">
+            <label for="url">参考 URL（可选）</label>
+            <input id="url" type="url" placeholder="https://github.com/All-Hands-AI/OpenHands">
 
-          <div class="actions">
-            <button id="run-btn" class="primary-btn">学习并自进化</button>
-            <button id="learn-btn" class="secondary-btn">只生成 Lesson</button>
-            <button id="apply-btn" class="secondary-btn">应用 Pending</button>
+            <div class="actions">
+              <button id="run-btn" class="primary-btn">学习并自进化</button>
+              <button id="learn-btn" class="secondary-btn">只生成 Lesson</button>
+              <button id="apply-btn" class="secondary-btn">应用 Pending</button>
+            </div>
           </div>
-        </div>
 
-        <div class="grid two">
           <div class="panel">
             <div class="panel-head">
               <h3>运行结果</h3>
-              <span id="run-state" class="pill">idle</span>
+              <button id="copy-result-btn" class="ghost-btn">复制</button>
             </div>
             <pre id="result-box" class="output">等待指令。</pre>
           </div>
+        </div>
+      </section>
+
+      <section id="memory" class="view">
+        <div class="memory-grid">
+          <div class="panel">
+            <div class="panel-head">
+              <h3>Agent Lessons</h3>
+              <span id="lesson-count" class="pill">0</span>
+            </div>
+            <div id="lesson-list" class="list"></div>
+          </div>
 
           <div class="panel">
-            <h3>最小边界</h3>
-            <ul class="rules">
-              <li>不自主修改 SOUL / CONSTITUTION</li>
-              <li>核心入口、执行器、权限、进化引擎需要确认</li>
-              <li>每次修改后运行编译与核心测试</li>
-              <li>失败复用现有进化引擎回滚</li>
-            </ul>
+            <div class="panel-head">
+              <h3>Self-Evolution Runs</h3>
+              <span id="run-count" class="pill">0</span>
+            </div>
+            <div id="run-list" class="list"></div>
           </div>
         </div>
       </section>
 
-      <section id="lessons" class="view">
-        <div class="panel">
-          <div class="panel-head">
-            <h3>Agent Lessons</h3>
-            <span id="lesson-count" class="pill">0</span>
-          </div>
-          <div id="lesson-list" class="list"></div>
-        </div>
-      </section>
-
-      <section id="runs" class="view">
-        <div class="panel">
-          <div class="panel-head">
-            <h3>Self-Evolution Runs</h3>
-            <span id="run-count" class="pill">0</span>
-          </div>
-          <div id="run-list" class="list"></div>
-        </div>
-      </section>
-
-      <section id="status" class="view">
-        <div class="grid two">
+      <section id="system" class="view">
+        <div class="system-grid">
           <div class="panel">
-            <h3>系统状态</h3>
+            <h3>身份文档</h3>
+            <div id="doc-list" class="doc-list"></div>
+          </div>
+          <div class="panel">
+            <h3>后端状态</h3>
             <pre id="status-box" class="output compact">加载中...</pre>
+          </div>
+          <div class="panel">
+            <h3>关键文件</h3>
+            <div id="file-list" class="file-list"></div>
           </div>
           <div class="panel">
             <h3>健康检查</h3>

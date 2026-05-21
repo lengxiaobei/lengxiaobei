@@ -208,14 +208,13 @@ class Doctor:
 
     def _check_circuit_breaker(self):
         try:
-            from .circuit_breaker import CircuitBreaker
-            cb = CircuitBreaker("doctor_check")
-            state = cb.state if hasattr(cb, "state") else "unknown"
-            self.check("熔断器", True,
-                       f"状态: {state}",
+            from .hard_boundary import HardBoundary
+            hb = HardBoundary()
+            self.check("硬边界", True,
+                       f"状态: 正常",
                        severity="ok")
         except Exception as e:
-            self.check("熔断器", False, str(e), severity="warn")
+            self.check("硬边界", False, str(e), severity="warn")
 
     # ---- MCP ----
 

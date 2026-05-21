@@ -443,11 +443,28 @@ class ToolRegistry:
     
     def _run_command_tool(self, command: str, timeout: int = 30) -> str:
         """执行系统命令"""
+        import shlex
         import subprocess
+        from .hard_boundary import BoundaryResult
+        from .executor import SafetyGate
+
         try:
+            # 安全检查
+            assessment = SafetyGate.assess(command)
+            if assessment == BoundaryResult.FORBIDDEN:
+                return f"命令被拒绝: 安全门控判定为禁止执行"
+            if assessment == BoundaryResult.NEEDS_CONFIRMATION:
+                return f"命令需确认: 安全门控判定该命令需要宿主确认"
+
+            # 安全拆分命令，不使用 shell=True
+            try:
+                args = shlex.split(command)
+            except ValueError as e:
+                return f"命令解析失败，拒绝执行: {e}"
+
             result = subprocess.run(
-                command,
-                shell=True,
+                args,
+                shell=False,
                 capture_output=True,
                 text=True,
                 timeout=timeout

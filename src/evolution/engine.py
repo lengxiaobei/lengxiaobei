@@ -19,8 +19,8 @@ import logging
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 
-from ..circuit_breaker import check_health, record_success, record_failure
 from ..integrity_checker import IntegrityChecker
+from ..hard_boundary import BoundaryResult, check_boundary
 
 from .models import (
     EvolutionPhase, EvolutionStatus, RiskLevel,
@@ -74,9 +74,9 @@ class AutonomousEvolutionEngine:
         abs_path = file_path if os.path.isabs(file_path) else os.path.join(self.project_root, file_path)
         rel_path = os.path.relpath(abs_path, self.project_root)
 
-        print(f"\n{'='*60}")
-        print(f"\U0001f9ec evolve: {goal_description}")
-        print(f"{'='*60}")
+        logger.info(f"{'='*60}")
+        logger.info(f"evolve: {goal_description}")
+        logger.info(f"{'='*60}")
 
         run_id = f"ev-{int(time.time())}-{os.path.basename(abs_path)}"
         audit_entry = self.audit.start_run(run_id, trigger="manual")
@@ -129,11 +129,11 @@ class AutonomousEvolutionEngine:
                     "permission": "N/A",
                 })
                 if not allowed:
-                    print(f"   ⚠️  Constitution 拒绝: {reason}")
+                    logger.warning(f"Constitution 拒绝: {reason}")
                     self.audit.finish_and_write(audit_entry, "rejected", f"Constitution: {reason}")
                     return {"status": "failed", "error": f"Constitution: {reason}"}
             except Exception as e:
-                print(f"   ⚠️  Constitution 检查异常: {e}")
+                logger.error(f"Constitution 检查异常: {e}")
                 pass
 
         if dry_run:
@@ -171,7 +171,7 @@ class AutonomousEvolutionEngine:
         test_result = self.verifier.verify(abs_path)
 
         if not test_result.success:
-            print(f"   ❌ 测试未通过: {test_result.summary}")
+            logger.error(f"测试未通过: {test_result.summary}")
             self.executor.rollback(exec_result)
             self._cb_record_failure("Tests failed")
             self.audit.log_phase(audit_entry, "verify", {"tests_passed": 0, "error": test_result.summary})
@@ -179,7 +179,7 @@ class AutonomousEvolutionEngine:
             self.audit.finish_and_write(audit_entry, "failed", f"测试未通过: {test_result.summary}")
             return {"status": "failed", "error": f"测试未通过: {test_result.summary}"}
 
-        print(f"   ✅ 测试通过: {test_result.summary}")
+        logger.info(f"测试通过: {test_result.summary}")
         self.executor.cleanup(exec_result)
 
         # ---- Step 4: Record ----
@@ -205,7 +205,7 @@ class AutonomousEvolutionEngine:
             "test_result": test_result.summary,
             "score": self.current_score,
         }
-        print(f"\n✅ 进化完成: {result['status']}")
+        logger.info(f"进化完成: {result['status']}")
         return result
 
     # ------------------------------------------------------------------
@@ -244,16 +244,15 @@ class AutonomousEvolutionEngine:
         if direction:
             improvements = self._sort_by_direction(improvements, direction)
 
-        # AUTONOMY 风险分级：过滤高风险改进点
-        from ..autonomy import AutonomyRisk
+        # HardBoundary 风险分级：3级过滤
         safe_improvements = []
         needs_confirmation = []
         for imp in improvements:
-            risk = self._assess_improvement_risk(imp)
-            if risk in (AutonomyRisk.FORBIDDEN, AutonomyRisk.CRITICAL):
-                logger.warning(f"跳过 {risk.value} 风险改进: {imp.issue[:50]}")
+            boundary = self._assess_improvement_risk(imp)
+            if boundary == BoundaryResult.FORBIDDEN:
+                logger.warning(f"跳过禁止修改: {imp.issue[:50]}")
                 continue
-            if risk == AutonomyRisk.HIGH:
+            if boundary == BoundaryResult.NEEDS_CONFIRMATION:
                 needs_confirmation.append(imp)
                 continue
             safe_improvements.append(imp)
@@ -263,7 +262,7 @@ class AutonomousEvolutionEngine:
         # 附加需要确认的改进点
         if needs_confirmation:
             result["needs_confirmation"] = [
-                f"[HIGH] {imp.file}: {imp.issue[:80]}" for imp in needs_confirmation
+                f"[NEEDS_CONFIRMATION] {imp.file}: {imp.issue[:80]}" for imp in needs_confirmation
             ]
 
         # 停机条件：连续失败
@@ -276,33 +275,28 @@ class AutonomousEvolutionEngine:
 
         return result
 
-    def _assess_improvement_risk(self, imp: ImprovementRecord) -> "AutonomyRisk":
-        """评估改进点的风险等级"""
-        from ..autonomy import AutonomyRisk
+    def _assess_improvement_risk(self, imp: ImprovementRecord) -> BoundaryResult:
+        """评估改进点的边界等级 — 3级：FORBIDDEN / NEEDS_CONFIRMATION / ALLOWED"""
         issue_lower = (imp.issue or "").lower()
         file_lower = (imp.file or "").lower()
 
         # 修改安全底线相关文件 -> FORBIDDEN
         forbidden_files = ["soul.md", "constitution.md", "autonomy.md"]
         if any(f in file_lower for f in forbidden_files):
-            return AutonomyRisk.FORBIDDEN
+            return BoundaryResult.FORBIDDEN
 
-        # 修改核心权限/执行器 -> HIGH
-        high_risk_files = ["executor.py", "constitution.py", "permission", "safety"]
-        if any(f in file_lower for f in high_risk_files):
-            return AutonomyRisk.HIGH
+        # 修改核心权限/执行器/硬边界 -> NEEDS_CONFIRMATION
+        core_files = ["executor.py", "constitution.py", "core.py", "facade_", "permission", "hard_boundary"]
+        if any(f in file_lower for f in core_files):
+            return BoundaryResult.NEEDS_CONFIRMATION
 
-        # 修改启动流程/核心编排 -> HIGH
-        if "core.py" in file_lower or "facade_" in file_lower:
-            return AutonomyRisk.HIGH
-
-        # 修小 bug / 补测试 -> LOW
+        # 修小 bug / 补测试 -> ALLOWED
         low_risk_keywords = ["缺少换行", "unused import", "typo", "test", "lint"]
         if any(k in issue_lower for k in low_risk_keywords):
-            return AutonomyRisk.LOW
+            return BoundaryResult.ALLOWED
 
-        # 默认 MEDIUM
-        return AutonomyRisk.MEDIUM
+        # 其他 -> ALLOWED（让云模型判断）
+        return BoundaryResult.ALLOWED
 
     def _sort_by_direction(self, improvements: List[ImprovementRecord], direction: str) -> List[ImprovementRecord]:
         """根据方向对改进点排序 — 与方向关键词匹配的优先"""
@@ -374,7 +368,7 @@ class AutonomousEvolutionEngine:
     # ------------------------------------------------------------------
 
     def discover_improvements(self, improvements: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
-        print("[EvolutionEngine] 发现改进点...")
+        logger.info("发现改进点...")
         if improvements:
             valid = []
             for imp in improvements:
@@ -389,7 +383,7 @@ class AutonomousEvolutionEngine:
         return [r.to_dict() for r in self._discover_best()]
 
     def execute_evolutions(self, improvements: List[Dict[str, Any]]) -> Dict[str, Any]:
-        print(f"[EvolutionEngine] 执行 {len(improvements)} 个进化...")
+        logger.info(f"执行 {len(improvements)} 个进化...")
 
         results = []
         success_count = 0
@@ -406,7 +400,7 @@ class AutonomousEvolutionEngine:
                 results.append({"improvement": rec.to_dict(), "result": {"status": "skipped", "error": "文件不存在"}})
                 continue
 
-            print(f"   [{i+1}/{max_execute}] {rec.type}: {rec.issue[:50]}")
+            logger.info(f"[{i+1}/{max_execute}] {rec.type}: {rec.issue[:50]}")
 
             try:
                 result = self.evolve(abs_path, rec.issue)
@@ -416,10 +410,10 @@ class AutonomousEvolutionEngine:
                     # 只标记成功的进化，失败的保留以供重试
                     self.curator.mark_seen(rec.signature)
                 else:
-                    print(f"   ⚠️  进化失败，保留在待处理队列: {rec.issue[:50]}")
+                    logger.warning(f"进化失败，保留在待处理队列: {rec.issue[:50]}")
             except Exception as e:
                 import traceback
-                traceback.print_exc()
+                logger.error(f"进化异常: {e}\n{traceback.format_exc()}")
                 results.append({"improvement": rec.to_dict(), "result": {"status": "failed", "error": str(e)}})
 
         return {
@@ -468,4 +462,4 @@ def create_autonomous_evolution_engine(project_root: str = None,
 if __name__ == "__main__":
     engine = AutonomousEvolutionEngine()
     result = engine.evolve_autonomously()
-    print(json.dumps(result, indent=2, ensure_ascii=False))
+    logger.info(json.dumps(result, indent=2, ensure_ascii=False))

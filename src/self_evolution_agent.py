@@ -9,14 +9,18 @@ SelfEvolutionAgent — 简化自演化管线
 不再有细碎风险分级。
 """
 
+import logging
 import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from .hard_boundary import HardBoundary, BoundaryResult, check_boundary
 from .llm import chat
+from .utils import extract_json
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -159,7 +163,7 @@ class SelfEvolutionAgent:
         self._record(result)
         self.history.append(result)
 
-        print(f"   ✅ 进化完成: {decision.patch_description[:60]}")
+        logger.info("进化完成: %s", decision.patch_description[:60])
         return result
 
     # ------------------------------------------------------------------
@@ -178,44 +182,98 @@ class SelfEvolutionAgent:
             context=str(context),
         )
         try:
-            import json
             result = chat(prompt, system="你是自治编程 Agent 的判断层。只返回 JSON。")
-            # extract JSON
-            text = result.strip()
-            if text.startswith("```"):
-                lines = text.split("\n")
-                text = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
-            data = json.loads(text)
+            data = extract_json(result)
             return EvolutionDecision(**data)
         except Exception as e:
-            print(f"[SelfEvolution] 云模型判断失败: {e}")
+            logger.warning("云模型判断失败: %s", e)
             return EvolutionDecision(worth_doing=False, reasoning=f"判断失败: {e}")
 
     def _apply_change(self, decision: EvolutionDecision) -> Dict[str, Any]:
-        """CodeEvolver: 执行源码修改"""
+        """CodeEvolver: 读取源码 → LLM 生成 patch → 写入文件"""
         target = os.path.join(str(self.project_root), decision.target_file)
         if not os.path.exists(target):
             return {"success": False, "error": f"文件不存在: {target}"}
 
         try:
-            with open(target) as f:
+            with open(target, encoding="utf-8") as f:
                 original = f.read()
 
             # 备份
             backup = target + f".bak.{int(time.time())}"
-            with open(backup, "w") as f:
+            with open(backup, "w", encoding="utf-8") as f:
                 f.write(original)
 
-            # 这里应该由 LLM 生成具体 diff/patch
-            # 当前简化为记录决策，实际 patch 生成由 evolution engine 的 proposer 完成
+            # LLM 生成修改后的代码
+            new_code = self._generate_patch(original, decision)
+            if not new_code:
+                return {"success": False, "error": "LLM 未生成有效代码"}
+
+            # 安全检查：新代码不能包含危险模式
+            if not self._is_safe_code(new_code):
+                return {"success": False, "error": "生成的代码包含危险模式，拒绝写入"}
+
+            # 写入
+            with open(target, "w", encoding="utf-8") as f:
+                f.write(new_code)
+
             return {
                 "success": True,
                 "file": decision.target_file,
                 "backup": backup,
                 "approach": decision.approach,
+                "lines_changed": abs(new_code.count("\n") - original.count("\n")),
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    def _generate_patch(self, original_code: str, decision: EvolutionDecision) -> str:
+        """让 LLM 根据决策生成修改后的完整代码"""
+        prompt = f"""你是代码修改专家。请根据以下决策修改代码。
+
+修改目标: {decision.patch_description}
+策略: {decision.approach}
+风险提示: {decision.risk_note}
+
+原始代码:
+```python
+{original_code[:12000]}
+```
+
+要求:
+1. 只修改必要的部分，不改动无关代码
+2. 保持原有代码风格和导入
+3. 不要删除现有功能
+4. 只返回完整的修改后 Python 代码，不要任何解释或 markdown 标记"""
+
+        try:
+            result = chat(prompt, system="你是冷小北的代码修改模块。只返回代码，不要解释。", temperature=0.2)
+            # 去掉可能的 markdown 代码围栏
+            code = result.strip()
+            if code.startswith("```"):
+                lines = code.split("\n")
+                # 去掉首行 ```python 和末行 ```
+                lines = [l for l in lines if not l.strip().startswith("```")]
+                code = "\n".join(lines)
+            return code.strip()
+        except Exception as e:
+            logger.warning("LLM patch 生成失败: %s", e)
+            return ""
+
+    @staticmethod
+    def _is_safe_code(code: str) -> bool:
+        """检查生成的代码是否包含危险模式"""
+        dangerous = [
+            "os.system(", "subprocess.call(", "subprocess.Popen(",
+            "eval(", "exec(", "__import__('os')",
+            "shutil.rmtree(", "os.remove('/",
+            "rm -rf", "format(c=", "/dev/sd",
+        ]
+        code_lower = code.lower()
+        for pattern in dangerous:
+            if pattern.lower() in code_lower:
+                return False
+        return True
 
     def _run_tests(self, file_path: str) -> Dict[str, Any]:
         """TestRunner: 运行测试"""
@@ -237,9 +295,9 @@ class SelfEvolutionAgent:
                     original = f.read()
                 with open(file_path, "w") as f:
                     f.write(original)
-                print(f"   ↩️  已回滚: {file_path}")
+                logger.info("已回滚: %s", file_path)
             except Exception as e:
-                print(f"   ❌ 回滚失败: {e}")
+                logger.warning("回滚失败: %s", e)
 
     def _record(self, result: EvolutionResult):
         """Memory: 记录经验"""

@@ -1,13 +1,16 @@
 const state = {
-  view: 'evolve',
+  view: 'chat',
   busy: false,
+  chatBusy: false,
+  context: null,
+  lastSyncAt: null,
 };
 
 const titles = {
-  evolve: ['自进化控制台', '学习其他 Agent 的长处，转成一次小步源码改进。'],
-  lessons: ['Lessons', '查看已沉淀的 Agent 能力经验。'],
-  runs: ['Runs', '查看每次自进化运行记录和结果。'],
-  status: ['系统状态', '查看 Web、核心和健康检查状态。'],
+  chat: ['对话工作台', '对话、身份上下文、运行状态使用同一份后端事实源。'],
+  evolve: ['自进化', '把学习方向转成 Lesson、源码改进、验证记录。'],
+  memory: ['记忆与记录', '查看 Agent 学到的能力与每次自进化运行结果。'],
+  system: ['系统上下文', '查看冷小北当前知道的身份、路径、关键文件和后端健康。'],
 };
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -18,18 +21,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function bindNavigation() {
   document.querySelectorAll('.nav-btn').forEach((button) => {
-    button.addEventListener('click', () => {
-      setView(button.dataset.view);
-    });
+    button.addEventListener('click', () => setView(button.dataset.view));
   });
-
   document.getElementById('refresh-btn').addEventListener('click', refreshAll);
 }
 
 function bindActions() {
+  document.getElementById('send-chat-btn').addEventListener('click', sendChat);
+  document.getElementById('chat-input').addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      sendChat();
+    }
+  });
   document.getElementById('run-btn').addEventListener('click', () => runSelfEvolution(false));
   document.getElementById('learn-btn').addEventListener('click', learnOnly);
   document.getElementById('apply-btn').addEventListener('click', () => runSelfEvolution(true));
+  document.getElementById('copy-result-btn').addEventListener('click', copyResult);
 }
 
 function setView(view) {
@@ -40,10 +48,136 @@ function setView(view) {
   document.querySelectorAll('.view').forEach((section) => {
     section.classList.toggle('active', section.id === view);
   });
-  const [title, subtitle] = titles[view] || titles.evolve;
+  const [title, subtitle] = titles[view] || titles.chat;
   document.getElementById('view-title').textContent = title;
   document.getElementById('view-subtitle').textContent = subtitle;
   refreshAll();
+}
+
+async function refreshAll() {
+  setSyncState('syncing');
+  const results = await Promise.allSettled([
+    refreshContext(),
+    refreshLessons(),
+    refreshRuns(),
+    refreshStatus(),
+  ]);
+  const failed = results.some((result) => result.status === 'rejected');
+  setSyncState(failed ? 'partial' : 'synced');
+}
+
+async function refreshContext() {
+  const data = await getJSON('/api/agent-context');
+  state.context = data.context;
+  state.lastSyncAt = new Date();
+  renderContext(data.context);
+}
+
+function renderContext(context) {
+  const identity = context.identity || {};
+  const runtime = context.runtime || {};
+  const health = context.health || {};
+  const memory = context.memory || {};
+
+  document.getElementById('identity-role').textContent = identity.role || '本地自主进化 Agent';
+  document.getElementById('health-label').textContent = health.status === 'healthy' ? '后端已同步' : '后端异常';
+  document.getElementById('health-dot').classList.toggle('ok', health.status === 'healthy');
+  document.getElementById('runtime-path').textContent = runtime.project_root || '未知项目路径';
+
+  document.getElementById('fact-root').textContent = runtime.project_root || '-';
+  document.getElementById('fact-memory').textContent = runtime.memory_dir || '-';
+  document.getElementById('fact-chat').textContent = runtime.chat_route || '-';
+  document.getElementById('fact-evolution').textContent = runtime.self_evolution_entry || '-';
+
+  const lessonCount = memory.lessons?.count || 0;
+  const runCount = memory.runs?.count || 0;
+  document.getElementById('metric-lessons').textContent = String(lessonCount);
+  document.getElementById('metric-runs').textContent = String(runCount);
+
+  renderCapabilities(context.capabilities || []);
+  renderBoundaries(context.boundaries || []);
+  renderDocs(context.docs || []);
+  renderFiles(context.key_files || []);
+}
+
+function renderCapabilities(capabilities) {
+  const list = document.getElementById('capability-list');
+  if (!capabilities.length) {
+    list.innerHTML = '<div class="empty">未同步能力列表。</div>';
+    return;
+  }
+  list.innerHTML = capabilities.map((capability) => `
+    <div class="capability">
+      <span>${escapeHTML(capability.name)}</span>
+      <small>${escapeHTML(capability.endpoint || '')}</small>
+    </div>
+  `).join('');
+}
+
+function renderBoundaries(boundaries) {
+  const list = document.getElementById('boundary-list');
+  list.innerHTML = boundaries.map((boundary) => `<li>${escapeHTML(boundary)}</li>`).join('');
+}
+
+function renderDocs(docs) {
+  const list = document.getElementById('doc-list');
+  if (!docs.length) {
+    list.innerHTML = '<div class="empty">未读取到身份文档。</div>';
+    return;
+  }
+  list.innerHTML = docs.map((doc) => `
+    <article class="doc-item">
+      <div class="item-row">
+        <strong>${escapeHTML(doc.path)}</strong>
+        <span class="pill ${doc.exists ? '' : 'bad'}">${doc.exists ? 'loaded' : 'missing'}</span>
+      </div>
+      <p>${escapeHTML(doc.excerpt || '未读取到内容。')}</p>
+    </article>
+  `).join('');
+}
+
+function renderFiles(files) {
+  const list = document.getElementById('file-list');
+  if (!files.length) {
+    list.innerHTML = '<div class="empty">未同步关键文件。</div>';
+    return;
+  }
+  list.innerHTML = files.map((file) => `
+    <div class="file-row">
+      <span>${escapeHTML(file.path)}</span>
+      <strong>${file.exists ? '存在' : '缺失'}</strong>
+    </div>
+  `).join('');
+}
+
+async function sendChat() {
+  if (state.chatBusy) {
+    return;
+  }
+
+  const input = document.getElementById('chat-input');
+  const message = input.value.trim();
+  if (!message) {
+    input.focus();
+    return;
+  }
+
+  input.value = '';
+  addChatMessage('user', message);
+  const pending = addChatMessage('agent', '正在思考，并带着当前自我上下文回答...');
+  setChatBusy(true);
+
+  try {
+    const data = await postJSON('/api/chat', { message });
+    pending.querySelector('.message-body').textContent = data.reply || '我收到了，但没有返回内容。';
+    await refreshContext().catch(() => {});
+  } catch (error) {
+    pending.classList.add('error');
+    pending.querySelector('.message-body').textContent = `请求失败：${error.message}`;
+  } finally {
+    setChatBusy(false);
+    input.focus();
+  }
 }
 
 async function runSelfEvolution(applyPending) {
@@ -56,6 +190,7 @@ async function runSelfEvolution(applyPending) {
   }
 
   setBusy(true, applyPending ? 'applying pending' : 'running');
+  setResult(applyPending ? '已发送应用 Pending 请求，后端正在运行...' : '已发送自进化请求，后端正在学习并尝试改进源码...', 'warn');
   try {
     const data = await postJSON('/api/self-evolve', {
       topic,
@@ -81,10 +216,11 @@ async function learnOnly() {
   }
 
   setBusy(true, 'learning');
+  setResult('已发送 Lesson 生成请求，后端正在提炼可学习能力...', 'warn');
   try {
     const data = await postJSON('/api/learn-agent', { topic, url });
     setResult(JSON.stringify(data.lesson || data, null, 2), data.status === 'ok' ? 'ok' : 'warn');
-    await refreshLessons();
+    await refreshAll();
   } catch (error) {
     setResult(error.message, 'error');
   } finally {
@@ -92,21 +228,14 @@ async function learnOnly() {
   }
 }
 
-async function refreshAll() {
-  await Promise.allSettled([
-    refreshLessons(),
-    refreshRuns(),
-    refreshStatus(),
-  ]);
-}
-
 async function refreshLessons() {
   const data = await getJSON('/api/lessons');
   document.getElementById('lesson-count').textContent = String(data.count || 0);
+  document.getElementById('metric-lessons').textContent = String(data.count || 0);
   const list = document.getElementById('lesson-list');
   const lessons = data.lessons || [];
   if (!lessons.length) {
-    list.innerHTML = '<div class="empty">还没有 lesson。</div>';
+    list.innerHTML = '<div class="empty">还没有 Lesson。可以在“自进化”页先生成一条。</div>';
     return;
   }
   list.innerHTML = lessons.slice().reverse().map((lesson) => `
@@ -115,7 +244,7 @@ async function refreshLessons() {
         <strong>${escapeHTML(lesson.capability || lesson.topic || '未命名能力')}</strong>
         <span class="pill">${escapeHTML(lesson.status || 'pending')}</span>
       </div>
-      <p>${escapeHTML(lesson.pattern || '')}</p>
+      <p>${escapeHTML(lesson.pattern || lesson.summary || '')}</p>
       <p class="muted">${escapeHTML(lesson.source || 'unknown')} · ${escapeHTML((lesson.suggested_files || []).join(', '))}</p>
     </article>
   `).join('');
@@ -124,6 +253,7 @@ async function refreshLessons() {
 async function refreshRuns() {
   const data = await getJSON('/api/runs');
   document.getElementById('run-count').textContent = String(data.count || 0);
+  document.getElementById('metric-runs').textContent = String(data.count || 0);
   const list = document.getElementById('run-list');
   const runs = data.runs || [];
   if (!runs.length) {
@@ -136,8 +266,8 @@ async function refreshRuns() {
         <strong>${escapeHTML(run.topic || run.goal || '自进化运行')}</strong>
         <span class="pill">${escapeHTML(run.status || 'unknown')}</span>
       </div>
-      <p>${escapeHTML(run.goal || '')}</p>
-      <p class="muted">${escapeHTML(run.target_file || '')}</p>
+      <p>${escapeHTML(run.goal || run.error || '')}</p>
+      <p class="muted">${escapeHTML(run.target_file || run.timestamp || '')}</p>
     </article>
   `).join('');
 }
@@ -187,17 +317,61 @@ function setBusy(busy, label) {
   });
 }
 
+function setChatBusy(busy) {
+  state.chatBusy = busy;
+  document.getElementById('send-chat-btn').disabled = busy;
+  document.getElementById('chat-input').disabled = busy;
+}
+
 function setResult(content, tone) {
   const box = document.getElementById('result-box');
   box.textContent = content;
   box.dataset.tone = tone;
 }
 
+function setSyncState(label) {
+  const pill = document.getElementById('sync-state');
+  pill.textContent = label;
+  pill.dataset.tone = label;
+}
+
+async function copyResult() {
+  const text = document.getElementById('result-box').textContent;
+  try {
+    await navigator.clipboard.writeText(text);
+    document.getElementById('copy-result-btn').textContent = '已复制';
+    window.setTimeout(() => {
+      document.getElementById('copy-result-btn').textContent = '复制';
+    }, 1200);
+  } catch {
+    setResult(`${text}\n\n复制失败：浏览器未允许剪贴板权限。`, 'warn');
+  }
+}
+
+function addChatMessage(role, content) {
+  const log = document.getElementById('chat-log');
+  const message = document.createElement('div');
+  message.className = `chat-message ${role}`;
+
+  const roleEl = document.createElement('div');
+  roleEl.className = 'message-role';
+  roleEl.textContent = role === 'user' ? '你' : '冷小北';
+
+  const body = document.createElement('div');
+  body.className = 'message-body';
+  body.textContent = content;
+
+  message.append(roleEl, body);
+  log.appendChild(message);
+  log.scrollTop = log.scrollHeight;
+  return message;
+}
+
 function escapeHTML(value) {
-  return String(value)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
