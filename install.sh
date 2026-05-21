@@ -25,9 +25,8 @@ echo -n "检查 Python 3.10+ ... "
 PYTHON=""
 for cmd in python3.12 python3.11 python3.10 python3; do
     if command -v "$cmd" &>/dev/null; then
-        ver=$("$cmd" -c 'import sys; print(sys.version_info[:2])' 2>/dev/null || echo "(0,0)")
-        major=$(echo "$ver" | grep -oE '[0-9]+' | head -1)
-        if [ "$major" -ge 10 ] 2>/dev/null; then
+        ok=$("$cmd" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null; echo $?)
+        if [ "$ok" -eq 0 ]; then
             PYTHON="$cmd"
             echo -e "${GREEN}$($PYTHON --version 2>&1)${NC}"
             break
