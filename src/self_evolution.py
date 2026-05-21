@@ -32,6 +32,8 @@ CONFIRM_FILES = {
     "src/autonomy.py",
 }
 
+SAFE_LESSON_TARGET = "src/learned_capabilities.py"
+
 
 @dataclass
 class SelfEvolutionRun:
@@ -85,10 +87,22 @@ class SelfEvolutionCore:
             return lesson.result
 
         goal = self._build_goal(lesson, target_file)
-        if self.evolution_engine is None:
+        if target_file == SAFE_LESSON_TARGET:
+            result = self._apply_to_learned_capabilities(lesson, goal)
+        elif self.evolution_engine is None:
             result = {"status": "failed", "error": "进化引擎未配置"}
         else:
             result = self.evolution_engine.evolve(target_file, goal)
+            if result.get("status") != "success":
+                fallback = self._apply_to_learned_capabilities(lesson, goal)
+                result = {
+                    "status": fallback.get("status"),
+                    "primary_target": target_file,
+                    "primary_result": result,
+                    "fallback_target": SAFE_LESSON_TARGET,
+                    "fallback_result": fallback,
+                    "message": "主目标未成功修改，已回退到安全源码能力注册表。",
+                }
 
         if result.get("status") == "success":
             verify = self._verify()
@@ -109,13 +123,14 @@ class SelfEvolutionCore:
         return result
 
     def _choose_target_file(self, lesson: AgentLesson) -> str:
-        candidates = lesson.suggested_files or ["src/self_evolution.py"]
+        candidates = lesson.suggested_files or []
         for candidate in candidates:
             if self._check_boundary(candidate) == "allow":
                 path = self.project_root / candidate
                 if path.exists() and path.is_file():
                     return candidate
-        return "src/self_evolution.py"
+        self._ensure_safe_lesson_target()
+        return SAFE_LESSON_TARGET
 
     def _build_goal(self, lesson: AgentLesson, target_file: str) -> str:
         prompt = f"""把以下 Agent 学习经验转成冷小北对指定源码文件的一次小步改进目标。
@@ -167,6 +182,63 @@ class SelfEvolutionCore:
                 outputs.append({"command": " ".join(cmd), "error": str(exc)})
                 return {"success": False, "outputs": outputs}
         return {"success": True, "outputs": outputs}
+
+    def _apply_to_learned_capabilities(self, lesson: AgentLesson, goal: str) -> Dict[str, Any]:
+        self._ensure_safe_lesson_target()
+        target = self.project_root / SAFE_LESSON_TARGET
+        original = target.read_text(encoding="utf-8")
+        if lesson.id in original:
+            return {
+                "status": "success",
+                "file_path": str(target),
+                "goal": goal,
+                "changed": False,
+                "message": "Lesson 已经沉淀到源码能力注册表。",
+            }
+
+        entry = {
+            "id": lesson.id,
+            "topic": lesson.topic,
+            "source": lesson.source,
+            "capability": lesson.capability,
+            "pattern": lesson.pattern,
+            "adaptation": lesson.adaptation,
+            "goal": goal,
+            "created_at": lesson.created_at,
+        }
+        insertion = "\nLEARNED_CAPABILITIES.append(\n"
+        insertion += self._format_python_dict(entry, indent=4)
+        insertion += "\n)\n"
+
+        target.write_text(original.rstrip() + "\n" + insertion, encoding="utf-8")
+        return {
+            "status": "success",
+            "file_path": str(target),
+            "goal": goal,
+            "changed": True,
+            "message": "Lesson 已沉淀为源码级 learned capability。",
+        }
+
+    def _ensure_safe_lesson_target(self) -> None:
+        target = self.project_root / SAFE_LESSON_TARGET
+        if target.exists():
+            return
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(
+            '"""Learned capabilities registry."""\n\n'
+            "from __future__ import annotations\n\n"
+            "from typing import Any, Dict, List\n\n\n"
+            "LEARNED_CAPABILITIES: List[Dict[str, Any]] = []\n\n\n"
+            "def list_learned_capabilities() -> List[Dict[str, Any]]:\n"
+            "    return list(LEARNED_CAPABILITIES)\n",
+            encoding="utf-8",
+        )
+
+    @staticmethod
+    def _format_python_dict(data: Dict[str, Any], indent: int = 4) -> str:
+        from pprint import pformat
+
+        return pformat(data, indent=indent, width=100, sort_dicts=False)
 
     def _record_run(
         self,

@@ -196,6 +196,7 @@ class LengXiaobei:
             "scripts/lx_self_evolve.py",
             "memory/agent_lessons.json",
             "memory/self_evolution_runs.json",
+            "config/default.yaml",
         ]
         existing_files = [path for path in known_files if (self.project_root / path).exists()]
 
@@ -225,9 +226,12 @@ class LengXiaobei:
             "",
             "## 对话能力边界",
             "- 当前聊天层已经知道上述项目和身份摘要。",
-            "- 当前聊天层可以回答身份、架构、目录、下一步优化建议。",
+            "- 当前聊天层可以回答身份、架构、目录、模型配置摘要、下一步优化建议。",
+            "- 后端已暴露 GET /api/model-config，可读取经过脱敏的模型配置、启用模型、provider key 是否存在、模型状态和性能摘要。",
             "- 需要真实改源码、学习其他 Agent、执行验证时，应引导宿主使用 UI 的“自进化”页或本地脚本，而不是要求宿主粘贴整个项目。",
-            "- 不要声称自己完全看不到本地项目；只能说具体文件的实时全文需要由工具读取或由自进化流程处理。",
+            "- 不要声称自己没有文件读取/操作权限；应说明普通聊天只能使用后端注入摘要，而本地后端 API 和自进化流程拥有受边界约束的文件读取与源码修改能力。",
+            "",
+            self._build_model_context(),
             "",
             "## 身份与约束文件摘要",
             "\n\n".join(docs) if docs else "未读取到身份文档摘要。",
@@ -244,6 +248,32 @@ class LengXiaobei:
         if len(content) <= max_chars:
             return content
         return content[:max_chars].rstrip() + "\n..."
+
+    def _build_model_context(self) -> str:
+        try:
+            import yaml
+            config_path = self.project_root / "config" / "default.yaml"
+            cfg = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+            model_cfg = cfg.get("models", {})
+            enabled = model_cfg.get("enabled") or []
+            lines = [
+                "## 模型配置摘要",
+                "- 配置文件: config/default.yaml",
+                f"- 默认模型: {model_cfg.get('default', 'unknown')}",
+                f"- 启用模型: {', '.join(enabled) if enabled else '未配置'}",
+                f"- 温度: {model_cfg.get('temperature', 'unknown')}",
+                f"- 超时: {model_cfg.get('timeout', 'unknown')} 秒",
+                "- API Key 读取顺序: 环境变量 -> config/default.yaml -> ~/.openclaw/openclaw.json",
+            ]
+            try:
+                lines.append("```")
+                lines.append(llm.model_status())
+                lines.append("```")
+            except Exception:
+                pass
+            return "\n".join(lines)
+        except Exception as exc:
+            return f"## 模型配置摘要\n- 读取失败: {exc}"
 
     # ------------------------------------------------------------------
     # 进化 API

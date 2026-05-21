@@ -1,21 +1,11 @@
 [
   {
-    "id": "lesson_1779387081",
-    "source": "OpenHands",
-    "capability": "小粒度代码自进化闭环能力",
-    "pattern": "执行代码自修改时严格限定单轮变更代码行数阈值，变更前先生成对应单元测试用例，变更后立即跑测，通过则提交版本并记录收益，未通过则自动回滚代码并留存失败原因作为经验项",
-    "why_good": "完美匹配冷小北当前小步修改、测试、回滚、记忆的目标，可大幅降低自改代码的崩溃风险，能稳定将其他Agent的长处转化为自身源码能力，避免无效学习",
-    "adaptation": "给现有代码修改模块新增3个轻量钩子：1.单轮变更强制校验行数不超过30行；2.变更前自动生成对应入参验证用例；3.变更跑测失败自动调用git回滚并写入本地经验日志，无需改动核心架构",
-    "suggested_files": [
-      "core/code_editor.py",
-      "utils/git_utils.py",
-      "modules/experience_logger.py"
-    ],
-    "status": "verified",
+    "id": "run_1779388327",
     "topic": "自主学习openhands的，进化能力",
-    "evidence": "OpenHands v0.18版本自进化模块统计显示，采用小步变更+自动回滚机制后，代码自修改成功率从32%提升至79%",
-    "created_at": 1779387081.109916,
-    "applied_at": 1779388327.614698,
+    "lesson_id": "lesson_1779387081",
+    "target_file": "src/learned_capabilities.py",
+    "goal": "给src/learned_capabilities.py中的现有代码修改逻辑新增3个轻量校验钩子：单轮变更代码行数强制校验不超过30行、变更前自动生成对应入参验证单元测试用例、变更跑测失败自动调用git回滚并写入本地经验日志",
+    "status": "verified",
     "result": {
       "status": "success",
       "file_path": "/Users/panhao/projects/lengxiaobei/src/learned_capabilities.py",
@@ -39,25 +29,16 @@
           }
         ]
       }
-    }
+    },
+    "created_at": 1779388327.615554
   },
   {
-    "id": "lesson_1779387712",
-    "source": "OpenHands (OpenDevin)",
-    "capability": "分层情景记忆与事件流压缩",
-    "pattern": "OpenHands 用 EventStream 记录所有 action/observation，并通过 condenser（如 LLMSummarizingCondenser）在上下文超限前把旧事件压缩成摘要事件保留在流中，既保留长程线索又控制 token",
-    "why_good": "解决了长会话/多轮任务中记忆爆炸与遗忘的矛盾，且摘要本身作为事件可追溯、可回滚，符合冷小北小步可逆原则",
-    "adaptation": "在冷小北加一个轻量 episode 日志：每次交互追加 {time, intent, action, result} 到 jsonl，达到阈值N条时调用一次 LLM 把旧条目压成一段 summary 事件写回，原始条目归档；查询记忆时优先读 summary+最近N条",
-    "suggested_files": [
-      "memory/episode_log.py",
-      "memory/condenser.py",
-      "memory/__init__.py"
-    ],
-    "status": "verified",
+    "id": "run_1779388414",
     "topic": "学习openhands的记忆方面长处",
-    "evidence": "OpenHands 源码 openhands/memory/condenser/ 下的 LLMSummarizingCondenser 实现了事件流摘要压缩",
-    "created_at": 1779387712.9464011,
-    "applied_at": 1779388414.9739609,
+    "lesson_id": "lesson_1779387712",
+    "target_file": "src/learned_capabilities.py",
+    "goal": "在src/learned_capabilities.py中新增适配OpenHands事件流压缩经验的轻量分层情景记忆逻辑，每次交互完成后追加含time、intent、action、result字段的条目到本地episode.jsonl日志，当日志条目数达阈值10条时复用项目现有LLM能力将最早的7条压缩为单条summary事件写回日志，原始旧条目归档到同目录archive子文件夹，记忆查询优先读取最新summary加最近3条未压缩条目，全程不改动现有核心架构与安全规则",
+    "status": "verified",
     "result": {
       "status": "success",
       "file_path": "/Users/panhao/projects/lengxiaobei/src/learned_capabilities.py",
@@ -81,6 +62,7 @@
           }
         ]
       }
-    }
+    },
+    "created_at": 1779388414.975164
   }
 ]

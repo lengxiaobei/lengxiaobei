@@ -47,6 +47,13 @@ IDENTITY_DOCS = [
     "docs/CONSTITUTION.md",
 ]
 
+MODEL_CONFIG_FILES = [
+    "config/default.yaml",
+    "config/development.yaml",
+    "config/production.yaml",
+    "config/config.json",
+]
+
 # ---------------------------------------------------------------------------
 # 延迟初始化 Agent（避免启动时加载所有模块）
 # ---------------------------------------------------------------------------
@@ -86,6 +93,61 @@ def _records_summary(rel_path: str) -> dict:
     if isinstance(data, dict):
         return {"path": rel_path, "count": len(data), "latest": None}
     return {"path": rel_path, "count": 0, "latest": None}
+
+
+def _safe_public_model_config() -> dict:
+    try:
+        import yaml
+        default_config = yaml.safe_load((PROJECT_ROOT / "config/default.yaml").read_text()) or {}
+    except Exception:
+        default_config = {}
+
+    model_cfg = default_config.get("models", {}) if isinstance(default_config, dict) else {}
+    enabled = model_cfg.get("enabled") or []
+    public = {
+        "config_files": [
+            {"path": rel, "exists": (PROJECT_ROOT / rel).exists()}
+            for rel in MODEL_CONFIG_FILES
+        ],
+        "configured_default": model_cfg.get("default", ""),
+        "enabled": enabled,
+        "temperature": model_cfg.get("temperature"),
+        "max_tokens": model_cfg.get("max_tokens"),
+        "timeout": model_cfg.get("timeout"),
+        "max_retries": model_cfg.get("max_retries"),
+        "key_sources": [
+            "环境变量 LLM_API_KEY + LLM_PROVIDER",
+            "config/default.yaml models.providers",
+            "~/.openclaw/openclaw.json",
+        ],
+        "providers": {},
+        "status_text": "",
+        "performance_text": "",
+    }
+
+    try:
+        from src import llm
+        for model_id in enabled:
+            cfg = llm.MODELS.get(model_id, {})
+            provider = cfg.get("provider", "unknown")
+            public["providers"].setdefault(provider, {
+                "has_key": bool(llm._get_key(provider)),
+                "models": [],
+            })
+            public["providers"][provider]["models"].append({
+                "id": model_id,
+                "base_url": cfg.get("base_url", ""),
+                "context_window": cfg.get("context_window"),
+                "max_output": cfg.get("max_output"),
+                "strengths": cfg.get("strengths", []),
+                "cost_tier": cfg.get("cost_tier"),
+            })
+        public["status_text"] = llm.model_status()
+        public["performance_text"] = llm.get_performance_report()
+    except Exception as exc:
+        public["error"] = str(exc)
+
+    return public
 
 
 def _agent_context(agent=None) -> dict:
@@ -140,6 +202,7 @@ def _agent_context(agent=None) -> dict:
         },
         "capabilities": [
             {"name": "对话", "status": "active", "endpoint": "POST /api/chat"},
+            {"name": "模型配置检查", "status": "active", "endpoint": "GET /api/model-config"},
             {"name": "学习 Agent 长处", "status": "active", "endpoint": "POST /api/learn-agent"},
             {"name": "自进化源码改进", "status": "active", "endpoint": "POST /api/self-evolve"},
             {"name": "经验沉淀", "status": "active", "endpoint": "GET /api/lessons"},
@@ -160,6 +223,7 @@ def _agent_context(agent=None) -> dict:
             "lessons": _records_summary("memory/agent_lessons.json"),
             "runs": _records_summary("memory/self_evolution_runs.json"),
         },
+        "models": _safe_public_model_config(),
         "docs": docs,
     }
 
@@ -182,6 +246,7 @@ def index():
             "status": "GET /api/status",
             "health": "GET /api/health",
             "agent_context": "GET /api/agent-context",
+            "model_config": "GET /api/model-config",
             "evolution": "POST /api/evolution",
             "self_evolve": "POST /api/self-evolve",
             "lessons": "GET /api/lessons",
@@ -251,6 +316,12 @@ def api_agent_context():
     return jsonify({"status": "ok" if agent is not None else "failed", "context": context}), code
 
 
+@app.route("/api/model-config", methods=["GET"])
+def api_model_config():
+    _get_agent()
+    return jsonify({"status": "ok", "model_config": _safe_public_model_config()})
+
+
 @app.route("/api/chat", methods=["POST"])
 def api_chat():
     agent = _get_agent()
@@ -263,10 +334,51 @@ def api_chat():
         return jsonify({"error": "message 为空"}), 400
 
     try:
+        if _is_model_config_query(message):
+            return jsonify({
+                "reply": _format_model_config_reply(_safe_public_model_config()),
+                "status": "ok",
+                "source": "local_model_config",
+            })
         response = agent.chat(message)
         return jsonify({"reply": response, "status": "ok"})
     except Exception as e:
         return jsonify({"error": str(e), "status": "failed"}), 500
+
+
+def _is_model_config_query(message: str) -> bool:
+    text = message.lower()
+    keywords = [
+        "模型配置", "当前模型", "跑在什么模型", "用的什么模型", "llm",
+        "src/llm.py", "config/default.yaml", "provider", "api key",
+    ]
+    return any(keyword in text for keyword in keywords)
+
+
+def _format_model_config_reply(model_config: dict) -> str:
+    lines = [
+        "我可以直接读取本地模型配置，不需要你贴文件。",
+        "",
+        f"- 配置文件: config/default.yaml",
+        f"- 默认模型: {model_config.get('configured_default') or '未配置'}",
+        f"- 启用模型: {', '.join(model_config.get('enabled') or [])}",
+        f"- temperature: {model_config.get('temperature')}",
+        f"- max_tokens: {model_config.get('max_tokens')}",
+        f"- timeout: {model_config.get('timeout')} 秒",
+        f"- max_retries: {model_config.get('max_retries')}",
+        "",
+        "Provider 状态:",
+    ]
+    providers = model_config.get("providers") or {}
+    for name, info in providers.items():
+        key_state = "有 key" if info.get("has_key") else "无 key"
+        model_ids = [item.get("id", "") for item in info.get("models", [])]
+        lines.append(f"- {name}: {key_state}; {', '.join(model_ids)}")
+
+    status_text = model_config.get("status_text")
+    if status_text:
+        lines.extend(["", "模型状态:", status_text])
+    return "\n".join(lines)
 
 @app.route("/api/evolution", methods=["POST"])
 def api_evolution():

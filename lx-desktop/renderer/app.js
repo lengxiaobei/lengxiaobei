@@ -7,7 +7,7 @@ const state = {
 };
 
 const titles = {
-  chat: ['对话工作台', '对话、身份上下文、运行状态使用同一份后端事实源。'],
+  chat: ['对话工作台', '与冷小北对话，下方向或提问。'],
   evolve: ['自进化', '把学习方向转成 Lesson、源码改进、验证记录。'],
   memory: ['记忆与记录', '查看 Agent 学到的能力与每次自进化运行结果。'],
   system: ['系统上下文', '查看冷小北当前知道的身份、路径、关键文件和后端健康。'],
@@ -23,7 +23,12 @@ function bindNavigation() {
   document.querySelectorAll('.nav-btn').forEach((button) => {
     button.addEventListener('click', () => setView(button.dataset.view));
   });
-  document.getElementById('refresh-btn').addEventListener('click', refreshAll);
+  document.getElementById('refresh-btn').addEventListener('click', () => {
+    const btn = document.getElementById('refresh-btn');
+    btn.style.transform = 'rotate(360deg)';
+    setTimeout(() => { btn.style.transform = ''; }, 400);
+    refreshAll();
+  });
 }
 
 function bindActions() {
@@ -79,7 +84,7 @@ function renderContext(context) {
   const health = context.health || {};
   const memory = context.memory || {};
 
-  document.getElementById('identity-role').textContent = identity.role || '本地自主进化 Agent';
+  document.getElementById('identity-role').textContent = identity.role || '强进化型数字生命体';
   document.getElementById('health-label').textContent = health.status === 'healthy' ? '后端已同步' : '后端异常';
   document.getElementById('health-dot').classList.toggle('ok', health.status === 'healthy');
   document.getElementById('runtime-path').textContent = runtime.project_root || '未知项目路径';
@@ -151,25 +156,21 @@ function renderFiles(files) {
 }
 
 async function sendChat() {
-  if (state.chatBusy) {
-    return;
-  }
+  if (state.chatBusy) return;
 
   const input = document.getElementById('chat-input');
   const message = input.value.trim();
-  if (!message) {
-    input.focus();
-    return;
-  }
+  if (!message) { input.focus(); return; }
 
   input.value = '';
   addChatMessage('user', message);
-  const pending = addChatMessage('agent', '正在思考，并带着当前自我上下文回答...');
+  const pending = addChatMessage('agent', '正在思考...');
   setChatBusy(true);
 
   try {
     const data = await postJSON('/api/chat', { message });
-    pending.querySelector('.message-body').textContent = data.reply || '我收到了，但没有返回内容。';
+    const body = pending.querySelector('.message-body');
+    body.textContent = data.reply || '我收到了，但没有返回内容。';
     await refreshContext().catch(() => {});
   } catch (error) {
     pending.classList.add('error');
@@ -189,8 +190,8 @@ async function runSelfEvolution(applyPending) {
     return;
   }
 
-  setBusy(true, applyPending ? 'applying pending' : 'running');
-  setResult(applyPending ? '已发送应用 Pending 请求，后端正在运行...' : '已发送自进化请求，后端正在学习并尝试改进源码...', 'warn');
+  setBusy(true, applyPending ? 'applying' : 'running');
+  setResult(applyPending ? '已发送应用 Pending 请求...' : '已发送自进化请求...', 'warn');
   try {
     const data = await postJSON('/api/self-evolve', {
       topic,
@@ -210,13 +211,10 @@ async function learnOnly() {
   const topic = document.getElementById('topic').value.trim();
   const url = document.getElementById('url').value.trim();
 
-  if (!topic) {
-    setResult('请输入学习方向。', 'warn');
-    return;
-  }
+  if (!topic) { setResult('请输入学习方向。', 'warn'); return; }
 
   setBusy(true, 'learning');
-  setResult('已发送 Lesson 生成请求，后端正在提炼可学习能力...', 'warn');
+  setResult('正在提炼可学习能力...', 'warn');
   try {
     const data = await postJSON('/api/learn-agent', { topic, url });
     setResult(JSON.stringify(data.lesson || data, null, 2), data.status === 'ok' ? 'ok' : 'warn');
@@ -235,7 +233,7 @@ async function refreshLessons() {
   const list = document.getElementById('lesson-list');
   const lessons = data.lessons || [];
   if (!lessons.length) {
-    list.innerHTML = '<div class="empty">还没有 Lesson。可以在“自进化”页先生成一条。</div>';
+    list.innerHTML = '<div class="empty">还没有 Lesson。可以在"自进化"页先生成一条。</div>';
     return;
   }
   list.innerHTML = lessons.slice().reverse().map((lesson) => `
@@ -274,24 +272,29 @@ async function refreshRuns() {
 
 async function refreshStatus() {
   try {
-    const [status, health] = await Promise.all([
+    const [status, health, modelConfig] = await Promise.all([
       getJSON('/api/status'),
       getJSON('/api/health'),
+      getJSON('/api/model-config'),
     ]);
     document.getElementById('status-box').textContent = JSON.stringify(status, null, 2);
     document.getElementById('health-box').textContent = JSON.stringify(health, null, 2);
+    document.getElementById('model-box').textContent = JSON.stringify(modelConfig.model_config || modelConfig, null, 2);
   } catch (error) {
     document.getElementById('health-box').textContent = error.message;
+    document.getElementById('model-box').textContent = error.message;
   }
 }
+
+/* ================================================================
+   HTTP Helpers
+   ================================================================ */
 
 async function getJSON(url) {
   const response = await fetch(url);
   const text = await response.text();
   const data = text ? JSON.parse(text) : {};
-  if (!response.ok) {
-    throw new Error(data.error || `${response.status} ${response.statusText}`);
-  }
+  if (!response.ok) throw new Error(data.error || `${response.status} ${response.statusText}`);
   return data;
 }
 
@@ -303,11 +306,13 @@ async function postJSON(url, body) {
   });
   const text = await response.text();
   const data = text ? JSON.parse(text) : {};
-  if (!response.ok) {
-    throw new Error(data.error || `${response.status} ${response.statusText}`);
-  }
+  if (!response.ok) throw new Error(data.error || `${response.status} ${response.statusText}`);
   return data;
 }
+
+/* ================================================================
+   UI State Helpers
+   ================================================================ */
 
 function setBusy(busy, label) {
   state.busy = busy;
@@ -339,10 +344,9 @@ async function copyResult() {
   const text = document.getElementById('result-box').textContent;
   try {
     await navigator.clipboard.writeText(text);
-    document.getElementById('copy-result-btn').textContent = '已复制';
-    window.setTimeout(() => {
-      document.getElementById('copy-result-btn').textContent = '复制';
-    }, 1200);
+    const btn = document.getElementById('copy-result-btn');
+    btn.textContent = '已复制';
+    setTimeout(() => { btn.textContent = '复制'; }, 1200);
   } catch {
     setResult(`${text}\n\n复制失败：浏览器未允许剪贴板权限。`, 'warn');
   }
@@ -353,6 +357,16 @@ function addChatMessage(role, content) {
   const message = document.createElement('div');
   message.className = `chat-message ${role}`;
 
+  if (role === 'agent') {
+    const avatar = document.createElement('div');
+    avatar.className = 'message-avatar';
+    avatar.innerHTML = '<svg viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="16" fill="#14b8a6"/><path d="M11 13c0-1 .5-2.5 2.5-2.5S16 12 16 13" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/><path d="M16 13c0-1 .5-2.5 2.5-2.5S21 12 21 13" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/><path d="M13 20c0 0 1.2 2.5 3 2.5s3-2.5 3-2.5" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></svg>';
+    message.appendChild(avatar);
+  }
+
+  const contentDiv = document.createElement('div');
+  contentDiv.className = 'message-content';
+
   const roleEl = document.createElement('div');
   roleEl.className = 'message-role';
   roleEl.textContent = role === 'user' ? '你' : '冷小北';
@@ -361,7 +375,8 @@ function addChatMessage(role, content) {
   body.className = 'message-body';
   body.textContent = content;
 
-  message.append(roleEl, body);
+  contentDiv.append(roleEl, body);
+  message.appendChild(contentDiv);
   log.appendChild(message);
   log.scrollTop = log.scrollHeight;
   return message;

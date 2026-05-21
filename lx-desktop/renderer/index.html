@@ -3,70 +3,115 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>冷小北 · Agent 工作台</title>
+  <title>冷小北 · 数字共生体</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div class="app-shell">
-    <aside class="side">
-      <div class="brand">
-        <div class="brand-mark">LX</div>
-        <div>
-          <h1>冷小北</h1>
-          <p id="identity-role">本地自主进化 Agent</p>
+    <!-- ====== 侧边栏 ====== -->
+    <aside class="sidebar">
+      <div class="sidebar-inner">
+        <!-- 品牌 -->
+        <div class="brand">
+          <div class="brand-avatar">
+            <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="20" cy="20" r="20" fill="url(#avatar-grad)"/>
+              <path d="M14 16c0-1 .5-3 3-3s3 2 3 3" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/>
+              <path d="M20 16c0-1 .5-3 3-3s3 2 3 3" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/>
+              <path d="M16 24c0 0 1.5 3 4 3s4-3 4-3" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/>
+              <defs>
+                <linearGradient id="avatar-grad" x1="0" y1="0" x2="40" y2="40">
+                  <stop stop-color="#14b8a6"/>
+                  <stop offset="1" stop-color="#0d9488"/>
+                </linearGradient>
+              </defs>
+            </svg>
+          </div>
+          <div class="brand-text">
+            <h1>冷小北</h1>
+            <p id="identity-role">强进化型数字生命体</p>
+          </div>
         </div>
-      </div>
 
-      <div class="status-card">
-        <div class="status-row">
-          <span class="status-dot" id="health-dot"></span>
-          <strong id="health-label">连接中</strong>
+        <!-- 状态卡片 -->
+        <div class="status-card">
+          <div class="status-row">
+            <span class="status-dot" id="health-dot"></span>
+            <strong id="health-label">连接中</strong>
+          </div>
+          <p id="runtime-path">正在同步运行环境...</p>
         </div>
-        <p id="runtime-path">正在同步运行环境...</p>
-      </div>
 
-      <nav class="nav">
-        <button class="nav-btn active" data-view="chat">对话工作台</button>
-        <button class="nav-btn" data-view="evolve">自进化</button>
-        <button class="nav-btn" data-view="memory">记忆与记录</button>
-        <button class="nav-btn" data-view="system">系统上下文</button>
-      </nav>
+        <!-- 导航 -->
+        <nav class="nav">
+          <button class="nav-btn active" data-view="chat">
+            <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M2 5a2 2 0 012-2h12a2 2 0 012 2v6a2 2 0 01-2 2H6l-4 4V5z"/></svg>
+            <span>对话</span>
+          </button>
+          <button class="nav-btn" data-view="evolve">
+            <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M11.3 1.05a1 1 0 00-1.6.95l1 5H5a1 1 0 00-.8 1.6l6.5 8.5a1 1 0 001.6-.95l-1-5H15a1 1 0 00.8-1.6l-6.5-8.5z"/></svg>
+            <span>自进化</span>
+          </button>
+          <button class="nav-btn" data-view="memory">
+            <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12l-3.5-2L9 16V4H4z"/></svg>
+            <span>记忆</span>
+          </button>
+          <button class="nav-btn" data-view="system">
+            <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/></svg>
+            <span>系统</span>
+          </button>
+        </nav>
 
-      <div class="side-metrics">
-        <div>
-          <span>Lessons</span>
-          <strong id="metric-lessons">0</strong>
-        </div>
-        <div>
-          <span>Runs</span>
-          <strong id="metric-runs">0</strong>
+        <!-- 底部指标 -->
+        <div class="side-metrics">
+          <div class="metric">
+            <span>Lessons</span>
+            <strong id="metric-lessons">0</strong>
+          </div>
+          <div class="metric">
+            <span>Runs</span>
+            <strong id="metric-runs">0</strong>
+          </div>
         </div>
       </div>
     </aside>
 
+    <!-- ====== 主内容区 ====== -->
     <main class="main">
+      <!-- 顶栏 -->
       <header class="topbar">
-        <div>
-          <p class="eyebrow">Leng Xiaobei Control Surface</p>
+        <div class="topbar-left">
+          <p class="eyebrow">Leng Xiaobei</p>
           <h2 id="view-title">对话工作台</h2>
-          <p id="view-subtitle">对话、身份上下文、运行状态使用同一份后端事实源。</p>
+          <p id="view-subtitle">与冷小北对话，下方向或提问。</p>
         </div>
-        <button id="refresh-btn" class="icon-btn" title="同步后端状态">↻</button>
+        <button id="refresh-btn" class="icon-btn" title="同步后端状态">
+          <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18"><path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/></svg>
+        </button>
       </header>
 
+      <!-- ====== 对话视图 ====== -->
       <section id="chat" class="view active">
         <div class="workspace-grid">
           <div class="chat-panel">
             <div id="chat-log" class="chat-log" aria-live="polite">
               <div class="chat-message agent">
-                <div class="message-role">冷小北</div>
-                <div class="message-body">我在。本地身份、项目路径、记忆目录和自进化入口已经同步给我了。你可以直接下方向，也可以问我现在知道自己什么。</div>
+                <div class="message-avatar">
+                  <svg viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="16" fill="#14b8a6"/><path d="M11 13c0-1 .5-2.5 2.5-2.5S16 12 16 13" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/><path d="M16 13c0-1 .5-2.5 2.5-2.5S21 12 21 13" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/><path d="M13 20c0 0 1.2 2.5 3 2.5s3-2.5 3-2.5" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></svg>
+                </div>
+                <div class="message-content">
+                  <div class="message-role">冷小北</div>
+                  <div class="message-body">我在。本地身份、项目路径、记忆目录和自进化入口已经同步给我了。你可以直接下方向，也可以问我现在知道自己什么。</div>
+                </div>
               </div>
             </div>
 
             <div class="chat-compose">
               <textarea id="chat-input" rows="3" placeholder="输入方向或问题，Enter 发送，Shift+Enter 换行"></textarea>
-              <button id="send-chat-btn" class="primary-btn">发送</button>
+              <button id="send-chat-btn" class="primary-btn">
+                <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/></svg>
+                <span>发送</span>
+              </button>
             </div>
           </div>
 
@@ -97,6 +142,7 @@
         </div>
       </section>
 
+      <!-- ====== 自进化视图 ====== -->
       <section id="evolve" class="view">
         <div class="evolve-grid">
           <div class="panel command-panel">
@@ -127,6 +173,7 @@
         </div>
       </section>
 
+      <!-- ====== 记忆视图 ====== -->
       <section id="memory" class="view">
         <div class="memory-grid">
           <div class="panel">
@@ -147,6 +194,7 @@
         </div>
       </section>
 
+      <!-- ====== 系统视图 ====== -->
       <section id="system" class="view">
         <div class="system-grid">
           <div class="panel">
@@ -164,6 +212,10 @@
           <div class="panel">
             <h3>健康检查</h3>
             <pre id="health-box" class="output compact">加载中...</pre>
+          </div>
+          <div class="panel wide-panel">
+            <h3>模型配置</h3>
+            <pre id="model-box" class="output compact">加载中...</pre>
           </div>
         </div>
       </section>

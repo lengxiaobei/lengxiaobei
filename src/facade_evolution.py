@@ -88,8 +88,8 @@ class EvolutionFacade:
     @property
     def circuit_breaker(self):
         if self._circuit_breaker is None:
-            from .hard_boundary import HardBoundary
-            self._circuit_breaker = HardBoundary()
+            from .circuit_breaker import CircuitBreaker
+            self._circuit_breaker = CircuitBreaker("autonomous_evolution")
         return self._circuit_breaker
 
     @property
