@@ -106,6 +106,13 @@
               </div>
             </div>
 
+            <div class="chat-tools" aria-label="实时操作">
+              <button class="tool-btn" data-action="model_config">读取模型配置</button>
+              <button class="tool-btn" data-action="read_file" data-path="config/default.yaml">打开 config/default.yaml</button>
+              <button class="tool-btn" data-action="read_file" data-path="src/llm.py">查看 src/llm.py</button>
+              <button class="tool-btn" data-action="health">实时健康检查</button>
+            </div>
+
             <div class="chat-compose">
               <textarea id="chat-input" rows="3" placeholder="输入方向或问题，Enter 发送，Shift+Enter 换行"></textarea>
               <button id="send-chat-btn" class="primary-btn">

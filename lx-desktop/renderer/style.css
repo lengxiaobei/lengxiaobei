@@ -431,6 +431,45 @@ button:active { transform: scale(0.97); }
   color: var(--error);
 }
 
+.chat-message.tool-message .message-body {
+  border-color: var(--accent);
+  background: var(--surface);
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+  font-size: 12.5px;
+}
+
+/* Chat Tools */
+.chat-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  padding: 10px 16px;
+}
+
+.tool-btn {
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  background: var(--bg-raised);
+  color: var(--ink-2);
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.tool-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.tool-btn:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
 /* Chat Compose */
 .chat-compose {
   display: grid;

@@ -43,6 +43,9 @@ function bindActions() {
   document.getElementById('learn-btn').addEventListener('click', learnOnly);
   document.getElementById('apply-btn').addEventListener('click', () => runSelfEvolution(true));
   document.getElementById('copy-result-btn').addEventListener('click', copyResult);
+  document.querySelectorAll('.tool-btn').forEach((button) => {
+    button.addEventListener('click', () => runLocalAction(button));
+  });
 }
 
 function setView(view) {
@@ -179,6 +182,67 @@ async function sendChat() {
     setChatBusy(false);
     input.focus();
   }
+}
+
+async function runLocalAction(button) {
+  const action = button.dataset.action;
+  const path = button.dataset.path || '';
+  const label = button.textContent.trim();
+
+  button.disabled = true;
+  const pending = addChatMessage('agent', `正在执行本地操作：${label}...`);
+  pending.classList.add('tool-message');
+
+  try {
+    const data = await postJSON('/api/local-action', { action, path });
+    pending.querySelector('.message-body').textContent = formatLocalActionResult(data);
+    await refreshAll();
+  } catch (error) {
+    pending.classList.add('error');
+    pending.querySelector('.message-body').textContent = `本地操作失败：${error.message}`;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function formatLocalActionResult(data) {
+  const title = data.title || data.action || '本地操作结果';
+  const result = data.result || data;
+
+  if (data.action === 'read_file') {
+    const content = result.content || '';
+    return [
+      `${title}`,
+      `状态: ${result.status}`,
+      `大小: ${result.size || 0} bytes`,
+      result.truncated ? '注意: 内容已截断。' : '内容: ',
+      '',
+      content,
+    ].join('\n');
+  }
+
+  if (data.action === 'model_config') {
+    const providers = result.providers || {};
+    const providerLines = Object.entries(providers).map(([name, info]) => {
+      const keyState = info.has_key ? '有 key' : '无 key';
+      const models = (info.models || []).map((item) => item.id).join(', ');
+      return `- ${name}: ${keyState}; ${models}`;
+    });
+    return [
+      '实时模型配置',
+      `默认模型: ${result.configured_default || '-'}`,
+      `启用模型: ${(result.enabled || []).join(', ')}`,
+      `temperature: ${result.temperature}`,
+      `max_tokens: ${result.max_tokens}`,
+      `timeout: ${result.timeout} 秒`,
+      `max_retries: ${result.max_retries}`,
+      '',
+      'Provider:',
+      providerLines.join('\n'),
+    ].join('\n');
+  }
+
+  return `${title}\n${JSON.stringify(result, null, 2)}`;
 }
 
 async function runSelfEvolution(applyPending) {
