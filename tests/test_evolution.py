@@ -24,7 +24,7 @@ class TestModels:
         assert rec.file == "src/core.py"
         assert rec.issue == "test issue"
         assert rec.source == "kairos"
-        assert rec.signature == "src/core.py:test issue"
+        assert rec.signature == "src/core.py:test issue:optimization"
 
     def test_improvement_record_from_kairos_file_path(self):
         from src.evolution.models import ImprovementRecord
@@ -51,7 +51,7 @@ class TestModels:
         rec = ImprovementRecord(file="a.py", issue="test", priority="low")
         d = rec.to_dict()
         assert d["file"] == "a.py"
-        assert d["signature"] == "a.py:test"
+        assert d["signature"] == "a.py:test:optimization"
 
     def test_improvement_record_abspath(self):
         from src.evolution.models import ImprovementRecord

@@ -1,73 +1,99 @@
 # 冷小北 · Leng Xiaobei
 
-数字生命体 — 自演化 AI Agent
+数字生命体 — 自演化 AI Agent。轻内核、强治理、可插拔能力、主动记忆。
+
+## 快速安装 (macOS)
+
+```bash
+git clone https://github.com/lengxiaobei/lengxiaobei.git
+cd lengxiaobei
+./install.sh
+```
+
+安装脚本会自动：创建虚拟环境 → 安装依赖 → 配置 launchd 开机自启 → 运行 `lx onboard` 引导。
+
+## 使用
+
+```bash
+lx doctor           # 系统诊断
+lx onboard          # 首次安装引导
+lx daemon           # 启动守护进程 (后台常驻)
+lx status           # 查看运行状态
+lx version          # 版本信息
+```
+
+守护进程启动后：
+- 健康检查: http://localhost:8000/health
+- 日志: `tail -f logs/daemon.log`
+
+launchd 管理:
+```bash
+launchctl unload ~/Library/LaunchAgents/com.lengxiaobei.daemon.plist  # 停止
+launchctl load ~/Library/LaunchAgents/com.lengxiaobei.daemon.plist    # 启动
+```
 
 ## 架构
 
 ```
 lengxiaobei/
 ├── src/
-│   ├── core.py      # 核心引擎（Phase 1 主循环）
-│   ├── memory.py    # 记忆系统（SQLite）
-│   ├── learner.py   # 自主学习模块
-│   ├── llm.py       # 模型路由
-│   └── config.py    # 配置
-├── memory/          # 记忆数据库
-├── docs/
-│   ├── DESIGN.md    # 设计原则
-│   └── LEARN.md     # 学习记录
-└── daemon.py        # Phase 2 KAIROS 守护进程
+│   ├── core.py              # 核心引擎 — 四 Facade 编排
+│   ├── facade_memory.py     # MemoryFacade
+│   ├── facade_reasoning.py  # ReasoningFacade
+│   ├── facade_evolution.py  # EvolutionFacade
+│   ├── facade_guardian.py   # GuardianFacade
+│   ├── llm.py               # 多 provider 模型路由
+│   ├── memory.py            # SQLite 记忆系统
+│   ├── memory_tree.py       # 四层记忆树
+│   ├── hybrid_memory.py     # SQLite + FAISS 混合记忆
+│   ├── constitution.py      # 宪法治理
+│   ├── cli.py               # CLI 入口 (lx 命令)
+│   ├── doctor.py            # 系统诊断
+│   ├── evolution/           # 进化引擎 (audit + curator + proposer + executor + verifier)
+│   ├── kairos/              # KAIROS 守护 (heartbeat + events + scheduler + monitor + decision)
+│   └── mcp/                 # MCP 协议支持
+├── docs/                    # 设计文档
+├── memory/                  # 记忆数据
+├── install.sh               # macOS 一键安装
+├── pyproject.toml           # Python 包配置
+└── com.lengxiaobei.daemon.plist  # macOS launchd 服务
 ```
 
-## Phase 1 vs Phase 2
+## LLM 配置
 
-### Phase 1 — 手动模式
-手动启动，对话驱动。启动后等待用户输入，退出后保存记忆。
+冷小北自动从 `~/.openclaw/openclaw.json` 读取 API Key。支持的 provider：
+
+| Provider | 模型示例 |
+|---|---|
+| minimax | MiniMax-M2.7 |
+| volcengine | doubao-seed-2.0-pro, deepseek-v3.2, ark-code-latest |
+| bailian | qwen3.5-plus, qwen3-coder-plus, kimi-k2.5 |
+| anthropic | claude-3-opus/sonnet/haiku |
+
+配置格式 (`~/.openclaw/openclaw.json`):
+```json
+{
+  "models": {
+    "providers": {
+      "minimax": {"apiKey": "sk-xxx"},
+      "volcengine": {"apiKey": "xxx"}
+    }
+  }
+}
+```
+
+运行 `lx doctor` 可检查各 provider 的 Key 是否就绪。
+
+## 开发
 
 ```bash
-cd ~/projects/lengxiaobei
-python3 -m src.core
+pip install -e ".[dev]"     # 安装含开发依赖
+pytest tests/ -q             # 运行测试
+ruff check src/ tests/       # lint
 ```
-
-**特点：**
-- 主动式：需要潘豪发起对话
-- 即时响应：每次输入立即处理
-- 适合：实时交互、单次任务
-
-### Phase 2 — KAIROS 守护模式
-后台常驻代理，主动评估"anything worth doing right now?"
-
-```bash
-cd ~/projects/lengxiaobei
-python3 daemon.py
-```
-
-**特点：**
-- 被动触发：守护进程持续运行，定期评估状态
-- 后台任务：可执行夜间整理、主动汇报等
-- 夜间 autoDream：凌晨 3:30 自动整理当日学到的东西
-- append-only 日志：不删除自己的历史
-
-**KAIROS 心跳机制：**
-- 每 60 秒评估一次当前状态
-- 优雅退出（SIGTERM）：保存记忆后关闭
-- 状态持久化：重启后恢复上下文
-
-## autoDream 四阶段
-
-每晚凌晨 3:30 自动执行：
-
-1. **日志汇总** — 收集当天所有交互记录
-2. **知识点提取** — 从日志提取有价值的信息点
-3. **记忆重组** — 整合进长期记忆
-4. **次日优先级** — 设定明日关注点
-
-## 运行要求
-
-- Python 3.8+
-- 依赖：`pip install -r requirements.txt`
-- 环境变量：`MINIMAX_API_KEY`（可选，用于 LLM 调用）
 
 ## 项目理念
 
 克制、诚实、简洁。宪法为本，代码为用。
+
+详细设计方向见 [DESIGN_ROADMAP.md](DESIGN_ROADMAP.md)。
