@@ -28,24 +28,43 @@ class SafetyGate:
     RISK_HIGH = "high"
     RISK_CRITICAL = "critical"
 
-    # 允许直接执行的命令白名单
-    _ALLOWED_COMMANDS = {
-        # 文件查看
+    # 低风险命令白名单 — 仅限真正只读/无副作用的命令
+    _LOW_RISK_COMMANDS = {
+        # 文件查看（只读）
         "ls", "cat", "head", "tail", "grep", "find", "wc", "file", "stat",
         "diff", "tree", "du", "df",
-        # 系统信息
+        # 系统信息（只读）
         "echo", "pwd", "which", "whoami", "hostname", "uname", "date",
         "env", "printenv", "id", "uptime",
-        # 开发工具
-        "git", "python3", "python", "pip", "pip3", "node", "npm", "npx",
-        "cargo", "rustc", "go",
-        # 文本处理
-        "sort", "uniq", "cut", "tr", "awk", "sed", "xargs",
-        # 网络（只读）
-        "curl", "wget", "ping", "dig", "nslookup",
-        # 压缩
+        # 文本处理（只读管道）
+        "sort", "uniq", "cut", "tr", "awk",
+        # 网络探测（只读）
+        "ping", "dig", "nslookup",
+    }
+
+    # 中等风险 — 可执行但有副作用，需确认
+    _MEDIUM_RISK_COMMANDS = {
+        # 开发工具（可执行任意代码）
+        "python3", "python", "node", "cargo", "rustc", "go",
+        # 包管理器（可安装/修改环境）
+        "pip", "pip3", "npm", "npx",
+        # 版本控制（可修改文件/推送代码）
+        "git",
+        # 文本处理（可原地修改）
+        "sed",
+        # 网络下载（可写入文件）
+        "curl", "wget",
+        # 压缩/解压（可创建/覆盖文件）
         "tar", "gzip", "gunzip", "zip", "unzip",
-        # 其他
+        # 管道组合
+        "xargs",
+    }
+
+    # 高风险命令 — 需明确确认
+    _HIGH_RISK_COMMANDS = {
+        "rm", "shutdown", "reboot", "sudo", "kill", "killall",
+        "systemctl", "service", "launchctl",
+        # 文件修改操作
         "mkdir", "cp", "mv", "touch", "chmod", "chown",
     }
 
@@ -98,12 +117,16 @@ class SafetyGate:
             cmd_name = cmd_name.rsplit("/", 1)[-1]
 
         # 检查是否需要确认
-        if cmd_name in cls._CONFIRMATION_COMMANDS:
+        if cmd_name in cls._HIGH_RISK_COMMANDS:
             return cls.RISK_HIGH
 
         # 白名单检查
-        if cmd_name in cls._ALLOWED_COMMANDS:
+        if cmd_name in cls._LOW_RISK_COMMANDS:
             return cls.RISK_LOW
+
+        # 中等风险
+        if cmd_name in cls._MEDIUM_RISK_COMMANDS:
+            return cls.RISK_MEDIUM
 
         return cls.RISK_MEDIUM
 
@@ -177,11 +200,12 @@ class Executor:
         return result
 
     def run_safe(self, command: str, **kwargs) -> ExecResult:
-        """执行只读类命令（低风险命令跳过确认）"""
+        """执行只读类命令（仅低风险命令跳过确认）"""
         risk = SafetyGate.assess(command)
         if risk == SafetyGate.RISK_CRITICAL:
             return ExecResult(success=False, output="高危命令已拦截", exit_code=-1)
-        # 低风险命令直接执行，跳过确认
+        # 仅低风险命令直接执行，跳过确认
         if risk == SafetyGate.RISK_LOW:
             return self.run(command, requires_approval=lambda _: True, **kwargs)
+        # 中等和高风险走正常确认流程
         return self.run(command, **kwargs)

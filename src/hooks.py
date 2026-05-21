@@ -13,11 +13,16 @@ import time
 import json
 import asyncio
 import subprocess
+import logging
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any, Callable, Union
 from enum import Enum
-import shlex  # 安全的命令行参数处理
+import shlex
+
+from .executor import SafetyGate
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================================# 事件类型定义# ============================================================================
@@ -221,7 +226,7 @@ class HookManager:
             elif isinstance(hook, AgentHook):
                 await self._execute_agent_hook(hook, context)
         except Exception as e:
-            print(f"[Hooks] 执行钩子失败: {e}")
+            logger.error(f"执行钩子失败: {e}")
     
     def _validate_command(self, command: str, allowed_args: Optional[List[str]] = None) -> bool:
         """
@@ -251,59 +256,68 @@ class HookManager:
         return True
     
     async def _execute_bash_hook(self, hook: BashCommandHook, context: Dict[str, Any]):
-        """执行Bash命令钩子"""
+        """执行Bash命令钩子 — 使用 SafetyGate + shlex.split + create_subprocess_exec"""
         if hook.status_message:
-            print(f"[Hooks] {hook.status_message}")
-        
+            logger.info(f"[Hooks] {hook.status_message}")
+
         # 安全地替换上下文变量，防止命令注入
         command = hook.command
         for key, value in context.items():
-            # 使用shlex.quote来安全地转义值，防止命令注入
             safe_value = shlex.quote(str(value))
             command = command.replace(f"${key}", safe_value)
-        
-        # 验证命令安全性
-        if not self._validate_command(command, hook.allowed_args):
-            print(f"[Hooks] 命令验证失败，可能存在安全风险: {command}")
+
+        # SafetyGate 风险评估
+        risk = SafetyGate.assess(command)
+        if risk == SafetyGate.RISK_CRITICAL:
+            logger.warning(f"[Hooks] 命令被 SafetyGate 拦截: {command}")
             return
-        
-        # 执行命令
-        process = await asyncio.create_subprocess_shell(
-            command,
-            shell=True,
+        if risk in (SafetyGate.RISK_HIGH, SafetyGate.RISK_MEDIUM):
+            logger.warning(f"[Hooks] 命令风险等级 {risk}，需确认: {command}")
+            return
+
+        # 使用 shlex.split 解析命令，避免 shell=True
+        try:
+            args = shlex.split(command)
+        except ValueError as e:
+            logger.warning(f"[Hooks] 命令解析失败: {e}")
+            return
+
+        if not args:
+            return
+
+        # 使用 create_subprocess_exec 替代 create_subprocess_shell
+        process = await asyncio.create_subprocess_exec(
+            *args,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE
         )
-        
+
         # 设置超时
         try:
             stdout, stderr = await asyncio.wait_for(
                 process.communicate(),
                 timeout=hook.timeout or 30
             )
-            
+
             if process.returncode != 0:
-                print(f"[Hooks] 命令执行失败: {stderr.decode()}")
-                # 异步唤醒
+                logger.warning(f"[Hooks] 命令执行失败: {stderr.decode()}")
                 if hook.async_rewake:
-                    # 这里可以实现唤醒逻辑
                     pass
             else:
-                print(f"[Hooks] 命令执行成功: {stdout.decode()}")
+                logger.info(f"[Hooks] 命令执行成功: {stdout.decode()}")
         except asyncio.TimeoutError:
             process.kill()
-            print(f"[Hooks] 命令执行超时")
+            logger.warning(f"[Hooks] 命令执行超时")
     
     async def _execute_prompt_hook(self, hook: PromptHook, context: Dict[str, Any]):
         """执行提示词钩子"""
         if hook.status_message:
-            print(f"[Hooks] {hook.status_message}")
+            logger.info(f"[Hooks] {hook.status_message}")
         
         # 替换上下文变量 - 对于提示词，我们不需要像命令那样严格的安全措施
         # 但仍然要小心处理，避免注入问题
         prompt = hook.prompt
         for key, value in context.items():
-            # 对于提示词，简单替换即可，因为不会作为命令执行
             prompt = prompt.replace(f"${key}", str(value))
         
         # 调用LLM
@@ -316,12 +330,12 @@ class HookManager:
             temperature=0.3
         )
         
-        print(f"[Hooks] 提示词执行结果: {response}")
+        logger.info(f"[Hooks] 提示词执行结果: {response}")
     
     async def _execute_http_hook(self, hook: HttpHook, context: Dict[str, Any]):
         """执行HTTP钩子"""
         if hook.status_message:
-            print(f"[Hooks] {hook.status_message}")
+            logger.info(f"[Hooks] {hook.status_message}")
         
         # 替换上下文变量 - 安全处理URL
         url = hook.url
@@ -353,19 +367,18 @@ class HookManager:
                 ) as response:
                     status = response.status
                     content = await response.text()
-                    print(f"[Hooks] HTTP请求结果: 状态码={status}, 内容={content}")
+                    logger.info(f"[Hooks] HTTP请求结果: 状态码={status}, 内容={content}")
             except Exception as e:
-                print(f"[Hooks] HTTP请求失败: {e}")
+                logger.warning(f"[Hooks] HTTP请求失败: {e}")
     
     async def _execute_agent_hook(self, hook: AgentHook, context: Dict[str, Any]):
         """执行代理钩子"""
         if hook.status_message:
-            print(f"[Hooks] {hook.status_message}")
+            logger.info(f"[Hooks] {hook.status_message}")
         
-        # 替换上下文变量 - 对于提示词，我们不需要像命令那样严格的安全措施
+        # 替换上下文变量
         prompt = hook.prompt
         for key, value in context.items():
-            # 对于提示词，简单替换即可，因为不会作为命令执行
             prompt = prompt.replace(f"${key}", str(value))
         
         # 调用LLM
@@ -378,7 +391,7 @@ class HookManager:
             temperature=0.3
         )
         
-        print(f"[Hooks] 代理验证结果: {response}")
+        logger.info(f"[Hooks] 代理验证结果: {response}")
     
     def save_hooks(self):
         """保存钩子配置"""
@@ -500,7 +513,7 @@ class HookManager:
                     matchers.append(matcher)
                 self.hooks[event] = matchers
         except Exception as e:
-            print(f"[Hooks] 加载钩子配置失败: {e}")
+            logger.error(f"加载钩子配置失败: {e}")
 
 
 # ============================================================================# 便捷函数# ============================================================================
