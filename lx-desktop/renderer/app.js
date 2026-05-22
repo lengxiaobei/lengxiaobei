@@ -675,16 +675,18 @@ function renderKanban(data) {
   const total = stats.total || 0;
   const totalEl = document.getElementById('kanban-total');
   if (totalEl) {
-    // 显示总数 + 真实进化率（关键指标）
+    // 显示总数 + 三档完成率
     const realRate = stats.real_completion_rate;
     const realN = stats.verified_and_real || 0;
+    const degradedN = stats.verified_degraded || 0;
     const fakeN = stats.verified_but_fake || 0;
-    if (realN + fakeN > 0) {
+    const totalClaims = realN + degradedN + fakeN;
+    if (totalClaims > 0) {
       const pct = Math.round((realRate || 0) * 100);
       const tone = pct >= 70 ? 'ok' : (pct >= 30 ? 'warn' : 'bad');
       totalEl.innerHTML = `${total}` +
-        ` <span class="real-rate-pill" data-tone="${tone}" title="真完成 = AST 检查新增/修改了函数；假完成 = 后端报 verified 但只追加了元数据">` +
-        `真完成 ${realN}/${realN + fakeN} (${pct}%)</span>`;
+        ` <span class="real-rate-pill" data-tone="${tone}" title="真完成 = LLM 写的真智能函数；降级 = fallback 占位；假完成 = 只追加元数据">` +
+        `真 ${realN} / 降 ${degradedN} / 假 ${fakeN} (真率 ${pct}%)</span>`;
     } else {
       totalEl.textContent = String(total);
     }
@@ -717,13 +719,17 @@ function renderKanban(data) {
 
     listEl.innerHTML = cards.map((card) => {
       const q = card.quality || {};
-      // 质量徽章 — 只在 verified 列显示
+      // 质量徽章 — 三态：真完成 / 降级完成 / 假完成
       let qualityBadge = '';
       if (status === 'verified') {
         if (q.substantive === true) {
           const added = (q.added || []).length;
           const changed = (q.changed_funcs || []).length;
-          qualityBadge = `<span class="quality-badge real" title="新增 ${added} 函数 / 修改 ${changed} 函数">✓ 真完成</span>`;
+          const realF = (q.real_funcs || []).length;
+          qualityBadge = `<span class="quality-badge real" title="真智能函数 ${realF} 个，新增/修改共 ${added + changed}">✓ 真完成</span>`;
+        } else if (q.substantive === 'degraded') {
+          const fbs = (q.fallback_funcs || []).join(', ');
+          qualityBadge = `<span class="quality-badge degraded" title="占位函数: ${escapeHTML(fbs)} — LLM 主路径失败，走了 fallback">🟡 降级完成</span>`;
         } else if (q.substantive === false) {
           qualityBadge = `<span class="quality-badge fake" title="${escapeHTML(q.reason || '只追加元数据')}">⚠ 假完成</span>`;
         } else {

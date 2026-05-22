@@ -195,3 +195,14 @@
 {"event_type": "runtime.restarting", "data": {"reason": "autonomy_tick_source_changed"}, "timestamp": 1779445372.470773, "source": "web"}
 {"event_type": "runtime.restart_scheduled", "data": {"reason": "functional_self_evolution_fallback", "delay_seconds": 0.8}, "timestamp": 1779446288.6404579, "source": "web"}
 {"event_type": "runtime.restarting", "data": {"reason": "functional_self_evolution_fallback"}, "timestamp": 1779446289.447637, "source": "web"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779446575.378591, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 61, "latest_id": "autonomy_1779446575"}, "timestamp": 1779446674.14916, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779446575", "status": "success", "elapsed_seconds": 98.76, "reason": "scheduled"}, "timestamp": 1779446674.1495092, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779446575"}, "timestamp": 1779446674.149772, "source": "autonomy"}
+{"event_type": "learning.gap.discovered", "data": {"gap": "缺乏外部知识获取工具，限制自主学习效果", "suggested_topic": "开发一个知识检索模块，集成外部API或本地知识库，以增强冷小北在自主学习中的信息访问和整合能力", "priority": 3, "kind": "introspection", "trigger": "autonomy_tick"}, "timestamp": 1779446714.7308931, "source": "reflection"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779446975.161296, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 62, "latest_id": "autonomy_1779446975"}, "timestamp": 1779447271.294194, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779446975", "status": "success", "elapsed_seconds": 296.129, "reason": "scheduled"}, "timestamp": 1779447271.294357, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779446975"}, "timestamp": 1779447271.294476, "source": "autonomy"}
+{"event_type": "runtime.restart_scheduled", "data": {"reason": "autonomy_tick_source_changed", "delay_seconds": 1.5}, "timestamp": 1779447271.294792, "source": "web"}
+{"event_type": "runtime.restarting", "data": {"reason": "autonomy_tick_source_changed"}, "timestamp": 1779447272.800788, "source": "web"}

@@ -1,12 +1,12 @@
-"""EvolutionEngine — 瘦编排器
+"""EvolutionEngine — 精简编排器
 
 进化流程: Discover → Propose → Execute → Verify
-治理内嵌: Constitution 合规 + 权限审批 + 熔断器在每个关键步骤
+熔断器在每个关键步骤
 
 架构:
 - Curator: 策展人 — 分级调度 + 去重
 - Proposer: 方案提出 — 优先 diff/patch 模式
-- SafeExecutor: 安全执行 — 权限前置 + 备份/写入/回滚
+- SafeExecutor: 精简执行 — 备份/写入/回滚
 - PytestVerifier: 测试验证 — 不通过禁止 cleanup
 - SkillsStore: 知识库 — 沉淀成功经验
 """
@@ -19,8 +19,6 @@ import logging
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 
-from ..integrity_checker import IntegrityChecker
-from ..hard_boundary import BoundaryResult, check_boundary
 from ..circuit_breaker import check_health, record_success, record_failure
 
 from .models import (

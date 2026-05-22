@@ -2059,12 +2059,13 @@ def api_learning_kanban():
         if lid:
             runs_by_lesson.setdefault(lid, []).append(run)
 
-    # 按状态分组 — 增加 substantive / metadata_only 两类来区分真假完成
+    # 按状态分组 — 区分三档完成质量
     columns = {
         "pending": [],
         "learning": [],          # 有 run 但还没最终状态
-        "substantive": [],       # ✅ 真完成 — verified + changed + 函数确实新增/修改
-        "metadata_only": [],     # ⚠️ 假完成 — verified 但只是追加 dict / 没改函数
+        "substantive": [],       # ✅ 真完成 — 新增了真智能函数
+        "degraded": [],          # 🟡 降级完成 — 新增了函数但是 fallback 占位
+        "metadata_only": [],     # ⚠️ 假完成 — verified 但只追加 dict / 没改函数
         "failed": [],
         "blocked": [],
     }
@@ -2078,11 +2079,22 @@ def api_learning_kanban():
         # 直接看 self_evolution._assess_change_quality 写入的 quality 字段
         q = result.get("quality") or {}
         if isinstance(q, dict) and "substantive" in q:
+            raw_sub = q.get("substantive")
+            # 保留 True/False/"degraded" 三态
+            if raw_sub == "degraded":
+                normalized_sub = "degraded"
+            elif raw_sub is True:
+                normalized_sub = True
+            else:
+                normalized_sub = False
             return {
-                "substantive": bool(q.get("substantive")),
+                "substantive": normalized_sub,
                 "changed": bool(result.get("changed")),
                 "reason": str(q.get("reason", "")),
                 "added": q.get("added") or [],
+                "real_funcs": q.get("real_funcs") or [],
+                "fallback_funcs": q.get("fallback_funcs") or [],
+                "fallback_count": q.get("fallback_count", 0),
                 "changed_funcs": q.get("changed_funcs") or [],
                 "removed": q.get("removed") or [],
                 "before_def_count": q.get("before_def_count"),
@@ -2166,12 +2178,16 @@ def api_learning_kanban():
             columns["blocked"].append(card)
         elif status == "failed":
             columns["failed"].append(card)
+        elif status == "verified_degraded":
+            columns["degraded"].append(card)
         elif status == "verified":
-            # 把 verified 进一步细分：substantive=True 才是真完成
-            if quality.get("substantive") is True:
+            # 把 verified 进一步细分：substantive=True 真完成；'degraded' 占位；其他算假完成
+            sub = quality.get("substantive")
+            if sub is True:
                 columns["substantive"].append(card)
+            elif sub == "degraded":
+                columns["degraded"].append(card)
             else:
-                # substantive 是 False 或 None（旧 lesson 不可靠）都算"假完成"
                 columns["metadata_only"].append(card)
         elif status == "applied_metadata_only":
             columns["metadata_only"].append(card)
@@ -2180,13 +2196,14 @@ def api_learning_kanban():
         else:
             columns["pending"].append(card)
 
-    # 统计 — 区分"真假完成"
+    # 统计 — 区分三档完成
     substantive_n = len(columns["substantive"])
+    degraded_n = len(columns["degraded"])
     metadata_n = len(columns["metadata_only"])
-    total_verified_claims = substantive_n + metadata_n
+    total_claims = substantive_n + degraded_n + metadata_n
 
-    # 向后兼容：保留 "verified" key（旧测试 / 旧前端可能依赖它）
-    columns["verified"] = columns["substantive"] + columns["metadata_only"]
+    # 向后兼容：保留 "verified" key（旧测试 / 旧前端可能依赖它）— 包含真+降级+假
+    columns["verified"] = columns["substantive"] + columns["degraded"] + columns["metadata_only"]
 
     stats = {
         "total": len(lessons),
@@ -2194,11 +2211,12 @@ def api_learning_kanban():
         "runs_total": len(runs),
         # 真实质量指标
         "real_completion_rate": (
-            round(substantive_n / total_verified_claims, 3)
-            if total_verified_claims else 0
+            round(substantive_n / total_claims, 3)
+            if total_claims else 0
         ),
-        "verified_but_fake": metadata_n,
         "verified_and_real": substantive_n,
+        "verified_degraded": degraded_n,
+        "verified_but_fake": metadata_n,
     }
 
     return jsonify({
@@ -2209,6 +2227,7 @@ def api_learning_kanban():
             "pending": "未开始",
             "learning": "已发起 run，未拿到最终状态",
             "substantive": "✅ 真完成 — 新增/修改了函数，能力真的多了",
+            "degraded": "🟡 降级完成 — 加了函数但是 fallback 占位（LLM 真智能未能生成）",
             "metadata_only": "⚠️ 假完成 — 后端报 verified 但只追加了元数据/未改函数",
             "failed": "❌ 失败 — apply 或 verify 报错",
             "blocked": "🚫 命中安全边界，被拒绝",

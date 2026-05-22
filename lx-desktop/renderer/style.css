@@ -1969,3 +1969,10 @@ button:disabled {
 .real-rate-pill[data-tone="ok"] { background: rgba(16,185,129,0.2); color: #6ee7b7; }
 .real-rate-pill[data-tone="warn"] { background: rgba(245,158,11,0.2); color: #fbbf24; }
 .real-rate-pill[data-tone="bad"] { background: rgba(239,68,68,0.2); color: #fca5a5; }
+
+/* 降级完成徽章（fallback 占位） */
+.quality-badge.degraded {
+  background: rgba(251,146,60,0.20);
+  color: #fdba74;
+  border: 1px solid rgba(251,146,60,0.45);
+}
