@@ -669,15 +669,36 @@ def chat(
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         }
-        payload = {
-            "model": model.split("/")[-1],
-            "messages": messages,
-            "temperature": temperature,
-        }
-        if max_tokens:
-            payload["max_tokens"] = max_tokens
-        elif cfg.get("max_output"):
-            payload["max_tokens"] = cfg["max_output"]
+
+        # Anthropic API 使用不同的认证头和请求格式
+        if cfg.get("provider") == "anthropic":
+            headers["x-api-key"] = api_key
+            headers["anthropic-version"] = "2023-06-01"
+            del headers["Authorization"]
+            url = f"{cfg['base_url']}/messages"
+            payload = {
+                "model": model.split("/")[-1],
+                "messages": [{"role": m["role"], "content": m["content"]} for m in messages if m["role"] != "system"],
+                "temperature": temperature,
+            }
+            if system:
+                payload["system"] = system
+            if max_tokens:
+                payload["max_tokens"] = max_tokens
+            elif cfg.get("max_output"):
+                payload["max_tokens"] = cfg["max_output"]
+            if "max_tokens" not in payload:
+                payload["max_tokens"] = 4096
+        else:
+            payload = {
+                "model": model.split("/")[-1],
+                "messages": messages,
+                "temperature": temperature,
+            }
+            if max_tokens:
+                payload["max_tokens"] = max_tokens
+            elif cfg.get("max_output"):
+                payload["max_tokens"] = cfg["max_output"]
         
         try:
             # 重试配置 - 指数退避
@@ -694,8 +715,14 @@ def chat(
                     # 记录成功
                     if resp.status_code == 200:
                         data = resp.json()
+                        result = None
+                        # OpenAI 兼容格式
                         if "choices" in data and data["choices"]:
                             result = data["choices"][0]["message"]["content"].strip()
+                        # Anthropic 格式
+                        elif "content" in data and data["content"]:
+                            result = data["content"][0]["text"].strip()
+                        if result:
                             _model_stats.record_success(model, response_time)
                             print(f"[LLM] 模型 {model} 调用成功，耗时 {response_time:.1f}秒")
                             if use_cache:

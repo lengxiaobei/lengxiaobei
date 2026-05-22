@@ -196,7 +196,7 @@ class KAIROS:
 
         # 通过核心 API 执行进化
         result = self.agent.execute_evolution_tasks(improvements)
-        status = result.get("status", "unknown") if isinstance(result, dict) else str(status)
+        status = result.get("status", "unknown") if isinstance(result, dict) else str(result)
         self._log(f"进化完成: {status}")
 
         # 清理已处理的改进点

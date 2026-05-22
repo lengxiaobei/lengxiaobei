@@ -115,10 +115,24 @@ class MCPServer:
                     "error": "Missing file parameter"
                 })
                 return
-            
+
+            # 读取文件内容而非直接传路径
+            code_content = ""
+            try:
+                from pathlib import Path
+                p = Path(file_path)
+                if not p.is_absolute():
+                    p = Path(os.getcwd()) / p
+                if p.exists() and p.is_file():
+                    code_content = p.read_text(encoding="utf-8", errors="replace")[:8000]
+                else:
+                    code_content = f"(文件不存在: {file_path})"
+            except Exception as read_err:
+                code_content = f"(读取文件失败: {read_err})"
+
             from .evolution.llm_client import generate_code as llm_generate_code
 
-            result = llm_generate_code(f"分析以下代码:\n{file_path}")
+            result = llm_generate_code(f"分析以下代码:\n```\n{code_content}\n```")
             await self._send_response({
                 "id": request_id,
                 "result": result

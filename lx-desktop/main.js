@@ -1,11 +1,15 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, session } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
+const http = require('http');
+
+// 后端 API 地址（lx_web.py 默认端口 8088）
+const API_BASE = process.env.LX_API_URL || 'http://localhost:8088';
 
 // 全局变量
 let mainWindow;
-let mcpServer;
+let backendProcess;
 
 // 创建主窗口
 function createWindow() {
@@ -21,8 +25,19 @@ function createWindow() {
     icon: path.join(__dirname, 'assets', 'icon.png')
   });
 
-  // 加载主界面
-  mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  // 拦截 /api/* 请求，代理到后端 lx_web.py
+  mainWindow.webContents.session.webRequest.onBeforeRequest(
+    { urls: ['file:///api/*'] },
+    (details, callback) => {
+      const apiPath = new URL(details.url).pathname;
+      proxyRequest(apiPath, details.method, details.uploadData)
+        .then((result) => callback({ redirectURL: result }))
+        .catch(() => callback({}));
+    }
+  );
+
+  // 加载主界面 — 优先从后端加载（同源，API 直接可用）
+  loadFrontend();
 
   // 开发模式下打开开发者工具
   if (process.argv.includes('--dev')) {
@@ -35,52 +50,116 @@ function createWindow() {
   });
 }
 
-// 启动 MCP 服务器
-function startMcpServer() {
-  const mcpServerPath = path.join(__dirname, '..', 'src', 'mcp_server.py');
-  
-  if (fs.existsSync(mcpServerPath)) {
-    mcpServer = spawn('python3', [mcpServerPath], {
+// 加载前端：优先从后端加载（API 同源可用），回退到本地文件
+function loadFrontend() {
+  const tryBackend = () => {
+    return new Promise((resolve, reject) => {
+      const req = http.get(`${API_BASE}/`, (res) => {
+        if (res.statusCode === 200) {
+          resolve(true);
+        } else {
+          reject(new Error(`后端返回 ${res.statusCode}`));
+        }
+        res.resume();
+      });
+      req.on('error', reject);
+      req.setTimeout(3000, () => { req.destroy(); reject(new Error('后端连接超时')); });
+    });
+  };
+
+  tryBackend().then(() => {
+    console.log(`从后端加载前端: ${API_BASE}`);
+    mainWindow.loadURL(`${API_BASE}/`);
+  }).catch(() => {
+    console.log('后端未启动，从本地文件加载（API 请求将不可用）');
+    mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  });
+}
+
+// 启动后端 lx_web.py
+function startBackend() {
+  const webPyPath = path.join(__dirname, '..', 'lx_web.py');
+
+  if (fs.existsSync(webPyPath)) {
+    const port = process.env.LX_WEB_PORT || '8088';
+    backendProcess = spawn('python3', [webPyPath], {
+      cwd: path.join(__dirname, '..'),
+      env: { ...process.env, LX_WEB_PORT: port },
       stdio: ['pipe', 'pipe', 'pipe']
     });
 
-    mcpServer.stdout.on('data', (data) => {
-      console.log('MCP Server:', data.toString());
+    backendProcess.stdout.on('data', (data) => {
+      console.log('[lx_web]', data.toString().trim());
     });
 
-    mcpServer.stderr.on('data', (data) => {
-      console.error('MCP Server Error:', data.toString());
+    backendProcess.stderr.on('data', (data) => {
+      console.error('[lx_web err]', data.toString().trim());
     });
 
-    mcpServer.on('close', (code) => {
-      console.log(`MCP Server exited with code ${code}`);
+    backendProcess.on('close', (code) => {
+      console.log(`lx_web.py 退出，code=${code}`);
+      backendProcess = null;
     });
 
-    console.log('MCP Server started');
+    console.log(`后端 lx_web.py 启动中 (端口 ${port})...`);
   } else {
-    console.error('MCP Server not found at:', mcpServerPath);
+    console.log('lx_web.py 不存在，跳过后端启动（请确保后端已手动运行）');
   }
 }
 
-// 停止 MCP 服务器
-function stopMcpServer() {
-  if (mcpServer) {
-    mcpServer.kill();
-    mcpServer = null;
-    console.log('MCP Server stopped');
+// 停止后端
+function stopBackend() {
+  if (backendProcess) {
+    backendProcess.kill();
+    backendProcess = null;
+    console.log('后端已停止');
   }
+}
+
+// 代理 API 请求到后端（用于 file:// 模式下的回退）
+async function proxyRequest(apiPath, method, uploadData) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(apiPath, API_BASE);
+    const options = {
+      hostname: url.hostname,
+      port: url.port,
+      path: url.pathname + url.search,
+      method: method,
+      headers: { 'Content-Type': 'application/json' },
+    };
+
+    const req = http.request(options, (res) => {
+      let body = '';
+      res.on('data', (chunk) => { body += chunk; });
+      res.on('end', () => {
+        // 返回 data: URL 让渲染进程拿到 JSON
+        const dataUrl = `data:application/json;charset=utf-8,${encodeURIComponent(body)}`;
+        resolve(dataUrl);
+      });
+    });
+
+    req.on('error', reject);
+    req.setTimeout(30000, () => { req.destroy(); reject(new Error('代理请求超时')); });
+
+    if (uploadData && uploadData.length > 0) {
+      const body = Buffer.concat(uploadData.map(d => d.bytes)).toString();
+      req.write(body);
+    }
+    req.end();
+  });
 }
 
 // 应用就绪时的处理
 app.on('ready', () => {
-  createWindow();
-  startMcpServer();
+  startBackend();
+  // 等后端启动后再创建窗口
+  setTimeout(createWindow, 2000);
 });
 
 // 所有窗口关闭时的处理
 app.on('window-all-closed', function () {
   if (process.platform !== 'darwin') {
-    stopMcpServer();
+    stopBackend();
     app.quit();
   }
 });
@@ -92,31 +171,50 @@ app.on('activate', function () {
   }
 });
 
-// 处理渲染进程的请求
-ipcMain.on('mcp-request', (event, request) => {
-  if (mcpServer) {
-    // 发送请求到 MCP 服务器
-    mcpServer.stdin.write(JSON.stringify(request) + '\n');
-    
-    // 读取响应
-    let response = '';
-    const responseHandler = (data) => {
-      response += data.toString();
-      if (response.includes('\n')) {
-        mcpServer.stdout.off('data', responseHandler);
-        try {
-          const parsedResponse = JSON.parse(response.trim());
-          event.reply('mcp-response', parsedResponse);
-        } catch (error) {
-          event.reply('mcp-error', { error: 'Failed to parse response' });
-        }
-      }
-    };
-    
-    mcpServer.stdout.on('data', responseHandler);
-  } else {
-    event.reply('mcp-error', { error: 'MCP Server not running' });
-  }
+// 应用退出时清理
+app.on('before-quit', () => {
+  stopBackend();
+});
+
+// 处理渲染进程的 API 请求（IPC 方式，用于 file:// 模式回退）
+ipcMain.on('api-request', (event, { id, url, method, body }) => {
+  const fullUrl = new URL(url, API_BASE);
+  const options = {
+    hostname: fullUrl.hostname,
+    port: fullUrl.port,
+    path: fullUrl.pathname + fullUrl.search,
+    method: method || 'GET',
+    headers: { 'Content-Type': 'application/json' },
+  };
+
+  const req = http.request(options, (res) => {
+    let data = '';
+    res.on('data', (chunk) => { data += chunk; });
+    res.on('end', () => {
+      event.reply(`api-response-${id}`, {
+        status: res.statusCode,
+        body: data,
+      });
+    });
+  });
+
+  req.on('error', (err) => {
+    event.reply(`api-response-${id}`, {
+      status: 0,
+      body: JSON.stringify({ error: err.message }),
+    });
+  });
+
+  req.setTimeout(30000, () => {
+    req.destroy();
+    event.reply(`api-response-${id}`, {
+      status: 0,
+      body: JSON.stringify({ error: '请求超时' }),
+    });
+  });
+
+  if (body) req.write(JSON.stringify(body));
+  req.end();
 });
 
 // 处理系统信息请求
@@ -124,7 +222,8 @@ ipcMain.on('system-info', (event) => {
   const systemInfo = {
     platform: process.platform,
     version: app.getVersion(),
-    electron: process.versions.electron
+    electron: process.versions.electron,
+    apiBase: API_BASE,
   };
   event.reply('system-info-response', systemInfo);
 });

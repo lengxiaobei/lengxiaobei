@@ -7,9 +7,12 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <!-- Toast 通知容器 -->
+  <div id="toast-container" aria-live="polite" aria-label="通知"></div>
+
   <div class="app-shell">
     <!-- ====== 侧边栏 ====== -->
-    <aside class="sidebar">
+    <aside class="sidebar" role="navigation" aria-label="主导航">
       <div class="sidebar-inner">
         <!-- 品牌 -->
         <div class="brand">
@@ -43,20 +46,20 @@
         </div>
 
         <!-- 导航 -->
-        <nav class="nav">
-          <button class="nav-btn active" data-view="chat">
+        <nav class="nav" aria-label="功能视图">
+          <button class="nav-btn active" data-view="chat" aria-label="对话视图">
             <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M2 5a2 2 0 012-2h12a2 2 0 012 2v6a2 2 0 01-2 2H6l-4 4V5z"/></svg>
             <span>对话</span>
           </button>
-          <button class="nav-btn" data-view="evolve">
+          <button class="nav-btn" data-view="evolve" aria-label="自进化视图">
             <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M11.3 1.05a1 1 0 00-1.6.95l1 5H5a1 1 0 00-.8 1.6l6.5 8.5a1 1 0 001.6-.95l-1-5H15a1 1 0 00.8-1.6l-6.5-8.5z"/></svg>
             <span>自进化</span>
           </button>
-          <button class="nav-btn" data-view="memory">
+          <button class="nav-btn" data-view="memory" aria-label="记忆视图">
             <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12l-3.5-2L9 16V4H4z"/></svg>
             <span>记忆</span>
           </button>
-          <button class="nav-btn" data-view="system">
+          <button class="nav-btn" data-view="system" aria-label="系统视图">
             <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/></svg>
             <span>系统</span>
           </button>
@@ -77,7 +80,7 @@
     </aside>
 
     <!-- ====== 主内容区 ====== -->
-    <main class="main">
+    <main class="main" role="main">
       <!-- 顶栏 -->
       <header class="topbar">
         <div class="topbar-left">
@@ -114,7 +117,7 @@
             </div>
 
             <div class="chat-compose">
-              <textarea id="chat-input" rows="3" placeholder="输入方向或问题，Enter 发送，Shift+Enter 换行"></textarea>
+              <textarea id="chat-input" rows="3" placeholder="输入方向或问题，Enter 发送，Shift+Enter 换行" aria-label="对话输入"></textarea>
               <button id="send-chat-btn" class="primary-btn">
                 <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/></svg>
                 <span>发送</span>

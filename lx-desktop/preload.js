@@ -1,36 +1,83 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+const API_TIMEOUT = 30000;
+let requestIdCounter = 0;
+
+// 检测当前是否运行在 http:// 环境（后端同源模式）
+function isBackendMode() {
+  return typeof window !== 'undefined' && window.location.protocol === 'http:';
+}
+
 // 暴露安全的 API 到渲染进程
 contextBridge.exposeInMainWorld('electronAPI', {
-  // MCP 服务器通信
-  sendMcpRequest: (request) => {
+  // 检测运行模式
+  isBackendMode: () => isBackendMode(),
+
+  // API 请求：后端模式下直接 fetch，file:// 模式下走 IPC 代理
+  apiRequest: (url, options = {}) => {
+    if (isBackendMode()) {
+      // 后端同源模式，直接 fetch
+      return fetch(url, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(options.headers || {}),
+        },
+      }).then(async (res) => {
+        const text = await res.text();
+        const data = text ? JSON.parse(text) : {};
+        if (!res.ok) throw new Error(data.error || `${res.status} ${res.statusText}`);
+        return data;
+      });
+    }
+
+    // file:// 模式，走 IPC 代理
     return new Promise((resolve, reject) => {
-      ipcRenderer.send('mcp-request', request);
-      
-      const responseHandler = (event, response) => {
-        ipcRenderer.off('mcp-response', responseHandler);
-        ipcRenderer.off('mcp-error', errorHandler);
-        resolve(response);
+      const id = ++requestIdCounter;
+      const timer = setTimeout(() => {
+        ipcRenderer.off(`api-response-${id}`, handler);
+        reject(new Error('API 请求超时'));
+      }, API_TIMEOUT);
+
+      const handler = (_event, response) => {
+        clearTimeout(timer);
+        try {
+          const data = JSON.parse(response.body);
+          if (response.status >= 400 || (data.error && response.status === 0)) {
+            reject(new Error(data.error || `请求失败 (${response.status})`));
+          } else {
+            resolve(data);
+          }
+        } catch (e) {
+          reject(new Error(`响应解析失败: ${e.message}`));
+        }
       };
-      
-      const errorHandler = (event, error) => {
-        ipcRenderer.off('mcp-response', responseHandler);
-        ipcRenderer.off('mcp-error', errorHandler);
-        reject(error);
-      };
-      
-      ipcRenderer.on('mcp-response', responseHandler);
-      ipcRenderer.on('mcp-error', errorHandler);
+
+      ipcRenderer.once(`api-response-${id}`, handler);
+      ipcRenderer.send('api-request', {
+        id,
+        url,
+        method: options.method || 'GET',
+        body: options.body ? JSON.parse(options.body) : undefined,
+      });
     });
   },
-  
+
   // 系统信息
   getSystemInfo: () => {
-    return new Promise((resolve) => {
-      ipcRenderer.send('system-info');
-      ipcRenderer.once('system-info-response', (event, info) => {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        ipcRenderer.off('system-info-response', handler);
+        reject(new Error('获取系统信息超时'));
+      }, 5000);
+
+      const handler = (_event, info) => {
+        clearTimeout(timer);
         resolve(info);
-      });
+      };
+
+      ipcRenderer.once('system-info-response', handler);
+      ipcRenderer.send('system-info');
     });
   }
 });
