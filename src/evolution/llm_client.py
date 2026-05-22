@@ -59,22 +59,73 @@ def generate_code(
     prompt: str,
     model: Optional[str] = None,
 ) -> str:
-    """生成代码 — 优先 Claude Code，回退到代码模型"""
+    """生成代码 — 优先 Claude Code，回退到代码模型。
+    自动剥离 markdown 代码块包装，确保返回值是合法 Python 源码。
+    """
     claude_result = _call_claude_code(prompt)
-    if claude_result and _looks_like_code(claude_result):
-        return claude_result
+    if claude_result:
+        cleaned = _strip_markdown_code_fences(claude_result)
+        if _looks_like_code(cleaned):
+            return cleaned
 
     models = Config.get_llm_models()
     code_model = next((m for m in models if "coder" in m.lower()), None)
     if code_model:
-        return llm.chat(prompt, model=code_model)
+        return _strip_markdown_code_fences(llm.chat(prompt, model=code_model))
     if model:
-        return llm.chat(prompt, model=model)
-    return llm.chat(prompt, model=models[0] if models else None)
+        return _strip_markdown_code_fences(llm.chat(prompt, model=model))
+    return _strip_markdown_code_fences(llm.chat(prompt, model=models[0] if models else None))
+
+
+def _strip_markdown_code_fences(text: str) -> str:
+    """剥离 ```python ... ``` 包装，提取纯 Python 源码。
+
+    LLM 经常返回 ```python\\n...\\n``` 形式的代码块，整段写入 .py 会语法错。
+    处理几种常见格式：
+      ```python\\n<code>\\n```
+      ```py\\n<code>\\n```
+      ```\\n<code>\\n```
+      纯代码（直接返回）
+      说明文字 + 代码（提取第一个代码块）
+    """
+    import re as _re
+
+    if not isinstance(text, str) or not text:
+        return text or ""
+
+    # 1) 含完整 fenced code block：提取最大的块
+    fence_pattern = _re.compile(
+        r"```(?:python|py|python3)?\s*\n?(.*?)\n?```",
+        _re.DOTALL | _re.IGNORECASE,
+    )
+    matches = fence_pattern.findall(text)
+    if matches:
+        return max(matches, key=len).strip() + "\n"
+
+    # 2) 没 fence 但有 markdown 说明 — 找首个 def/class/import 开头跳过废话
+    lines = text.split("\n")
+    for i, ln in enumerate(lines):
+        stripped = ln.lstrip()
+        if stripped.startswith(("def ", "class ", "import ", "from ", "async def ",
+                                "#!/", '"""', "'''", "@")):
+            return "\n".join(lines[i:]).rstrip() + "\n"
+
+    # 3) 看起来就是纯代码，原样返回
+    return text
 
 
 def _looks_like_code(text: str) -> bool:
-    return any(kw in text for kw in ["def ", "class ", "import ", "from ", "async def"])
+    """严格代码识别：必须能被 ast.parse 通过。"""
+    if not text or not text.strip():
+        return False
+    if not any(kw in text for kw in ["def ", "class ", "import ", "from ", "async def"]):
+        return False
+    try:
+        import ast
+        ast.parse(text)
+        return True
+    except SyntaxError:
+        return False
 
 
 def chat_bool(

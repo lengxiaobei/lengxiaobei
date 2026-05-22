@@ -314,3 +314,17 @@ LEARNED_CAPABILITIES.append(
             'None，以模拟上下文感知建议更新功能',
     'created_at': 1779442634.791339}
 )
+
+LEARNED_CAPABILITIES.append(
+{   'id': 'lesson_1779444884',
+    'topic': '新增一个自我反思工具模块，用于分析系统日志、工具调用历史和用户反馈，以识别设计模式中的问题，并在用户询问时输出具体建议',
+    'source': 'self_reflection',
+    'capability': '诊断设计缺陷',
+    'pattern': '在 src/critic.py 中添加一个函数 '
+               'diagnose_design_defects()，用于分析系统日志、工具调用历史和用户反馈，识别设计模式中的问题，并在用户询问时输出具体建议',
+    'adaptation': '[\'在 src/critic.py 中定义 diagnose_design_defects 函数，并实现日志、历史和反馈的读取与分析逻辑。\', "在 '
+                  'src/learned_capabilities.py 中注册新能力 \'diagnose_design_defects\'，以便系统在用户询问时调用。", '
+                  "'通过入口如 lx_web.py 或 daemon.py 集成该函数，确保在需要时触发自我反思。']",
+    'goal': '在 src/critic.py 中新增函数 diagnose_design_defects，用于分析系统日志、工具调用历史和用户反馈，识别设计模式中的问题并输出具体建议',
+    'created_at': 1779444884.2732108}
+)

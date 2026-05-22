@@ -183,3 +183,15 @@
 {"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779443423"}, "timestamp": 1779443638.5359612, "source": "autonomy"}
 {"event_type": "runtime.restart_scheduled", "data": {"reason": "autonomy_tick_source_changed", "delay_seconds": 1.5}, "timestamp": 1779443638.536265, "source": "web"}
 {"event_type": "runtime.restarting", "data": {"reason": "autonomy_tick_source_changed"}, "timestamp": 1779443640.042058, "source": "web"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779444778.633616, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 59, "latest_id": "autonomy_1779444778"}, "timestamp": 1779444884.288749, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779444778", "status": "success", "elapsed_seconds": 105.646, "reason": "scheduled"}, "timestamp": 1779444884.289191, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779444778"}, "timestamp": 1779444884.289706, "source": "autonomy"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "manual", "direction": "应用刚生成的 pending lesson，必须验证是否真实修改 safe target 模块，不能只沉淀 learned_capabilities"}, "timestamp": 1779445051.6300569, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 60, "latest_id": "autonomy_1779445051"}, "timestamp": 1779445370.958661, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779445051", "status": "success", "elapsed_seconds": 319.324, "reason": "manual"}, "timestamp": 1779445370.958841, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779445051"}, "timestamp": 1779445370.958987, "source": "autonomy"}
+{"event_type": "runtime.restart_scheduled", "data": {"reason": "autonomy_tick_source_changed", "delay_seconds": 1.5}, "timestamp": 1779445370.959357, "source": "web"}
+{"event_type": "runtime.restarting", "data": {"reason": "autonomy_tick_source_changed"}, "timestamp": 1779445372.470773, "source": "web"}
+{"event_type": "runtime.restart_scheduled", "data": {"reason": "functional_self_evolution_fallback", "delay_seconds": 0.8}, "timestamp": 1779446288.6404579, "source": "web"}
+{"event_type": "runtime.restarting", "data": {"reason": "functional_self_evolution_fallback"}, "timestamp": 1779446289.447637, "source": "web"}

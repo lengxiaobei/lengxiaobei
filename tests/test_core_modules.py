@@ -370,3 +370,42 @@ class TestLengXiaobeiCore:
         """确认不暴露 constitution"""
         assert not hasattr(agent, 'constitution'), \
             "LengXiaobei 不应直接暴露 .constitution 属性"
+
+
+class TestSelfEvolutionFunctionalFallback:
+    """自进化失败时应优先落到真实 safe target，而不是只写 metadata。"""
+
+    def test_expected_function_fallback_adds_callable(self, tmp_path):
+        from src.agent_learning import AgentLesson
+        from src.self_evolution import SelfEvolutionCore
+
+        target = tmp_path / "src" / "critic.py"
+        target.parent.mkdir(parents=True)
+        target.write_text('"""critic test target."""\n\nVALUE = 1\n', encoding="utf-8")
+
+        core = SelfEvolutionCore(str(tmp_path))
+        lesson = AgentLesson(
+            id="lesson_test",
+            source="test",
+            capability="diagnose design defects",
+            pattern="inspect context",
+            why_good="keeps self-evolution functional",
+            adaptation="add callable fallback",
+            suggested_files=["src/critic.py"],
+            topic="test fallback",
+        )
+        expected = [{"name": "diagnose_design_defects", "signature": "diagnose_design_defects(context: str) -> dict"}]
+
+        result = core._apply_expected_function_fallback(
+            lesson=lesson,
+            target_file="src/critic.py",
+            goal="add diagnose_design_defects",
+            expected_functions=expected,
+            primary_result={"status": "failed", "error": "代码验证失败"},
+        )
+
+        assert result["status"] == "success"
+        assert result["changed"] is True
+        check = core._check_capability("src/critic.py", expected)
+        assert check["all_callable"] is True
+        assert check["found"] == ["diagnose_design_defects"]
