@@ -307,9 +307,12 @@ class LengXiaobei:
         report = self.autonomy.run(direction=direction, boundary=boundary, pace=pace)
         return self.autonomy.format_report(report)
 
-    def learn_agent(self, topic: str, url: str = "") -> Dict[str, Any]:
-        """学习其他 Agent 的长处并写入 lesson 记忆。"""
-        lesson = self.self_evolution.learn(topic, url=url)
+    def learn_agent(self, topic: str, url: str = "", kind: str = "external", gap: str = "") -> Dict[str, Any]:
+        """学习其他 Agent 的长处并写入 lesson 记忆。
+
+        kind="introspection" 时跳过 web 抓取，直接让 LLM 设计冷小北自己的源码改造方案。
+        """
+        lesson = self.self_evolution.learn(topic, url=url, kind=kind, gap=gap)
         return lesson.to_dict()
 
     def evolve_from_lessons(self) -> Dict[str, Any]:

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .agent_learning import AgentLearner, AgentLearningStore, AgentLesson
+from .code_change_log import CodeChangeLogger
 from .llm import chat
 from .utils import atomic_write_json, extract_json, load_json
 
@@ -32,7 +33,24 @@ CONFIRM_FILES = {
     "src/autonomy.py",
 }
 
+# 兜底安全目标 — 当无法选定时落到这里。保留原值以维持向后兼容。
 SAFE_LESSON_TARGET = "src/learned_capabilities.py"
+
+# 自进化扩展白名单 — agent 可以主动改这些文件中的任意一个，
+# 而不是只能写元数据到 learned_capabilities.py。
+# 选择标准：
+#   1. 不在 BLOCKED_FILES / CONFIRM_FILES 中
+#   2. 与其他模块耦合度低，单文件就能完成有意义改进
+#   3. 已有自身职责的"次核心"模块，agent 改它能产生真实价值
+SAFE_TARGETS = (
+    "src/learned_capabilities.py",  # 能力注册表（兜底）
+    "src/buddy.py",                 # 协作伙伴 — AutoGen/角色类
+    "src/active_learner.py",        # 主动学习 — Copilot/Continue 类
+    "src/dev_team.py",              # 开发团队多 Agent — AutoGen 类
+    "src/critic.py",                # 代码审查 — Aider 类
+    "src/code_change_log.py",       # 变更日志 — Git 感知类
+    "src/testing.py",               # 测试钩子 — OpenHands 类
+)
 
 
 @dataclass
@@ -58,9 +76,10 @@ class SelfEvolutionCore:
         self.evolution_engine = evolution_engine
         self.runs_path = self.project_root / "memory" / "self_evolution_runs.json"
         self.runs_path.parent.mkdir(exist_ok=True)
+        self.change_logger = CodeChangeLogger(str(self.project_root))
 
-    def learn(self, topic: str, url: str = "") -> AgentLesson:
-        return self.learner.learn(topic, url=url)
+    def learn(self, topic: str, url: str = "", kind: str = "external", gap: str = "") -> AgentLesson:
+        return self.learner.learn(topic, url=url, kind=kind, gap=gap)
 
     def evolve_from_lessons(self) -> Dict[str, Any]:
         lesson = self.lesson_store.next_pending()
@@ -86,7 +105,10 @@ class SelfEvolutionCore:
             self._record_run(lesson, target_file, "", "blocked", lesson.result)
             return lesson.result
 
-        goal = self._build_goal(lesson, target_file)
+        plan = self._build_evolution_plan(lesson, target_file)
+        goal = plan["goal"]
+        expected_functions = plan["expected_functions"]
+        before = self.change_logger.snapshot(list(SAFE_TARGETS) + [target_file])
         if target_file == SAFE_LESSON_TARGET:
             result = self._apply_to_learned_capabilities(lesson, goal)
         elif self.evolution_engine is None:
@@ -104,10 +126,27 @@ class SelfEvolutionCore:
                     "message": "主目标未成功修改，已回退到安全源码能力注册表。",
                 }
 
+        # 记录 plan 让前端/后续能看到声称的函数
+        result["expected_functions"] = expected_functions
+
         if result.get("status") == "success":
-            verify = self._verify()
+            verify = self._verify(
+                target_file=target_file,
+                expected_functions=expected_functions,
+            )
             if verify["success"]:
-                lesson.status = "verified"
+                # 质量门：检查"是否真的新增/修改了函数"
+                quality = self._assess_change_quality(target_file, before)
+                result["quality"] = quality
+                if quality["substantive"]:
+                    lesson.status = "verified"
+                else:
+                    # 改了文件但没改逻辑（如只 append 一个 dict 元数据）
+                    lesson.status = "applied_metadata_only"
+                    result["status"] = "applied_metadata_only"
+                    result["message"] = (
+                        f"{result.get('message', '')} ⚠ 但未新增/修改函数，仅写入元数据。"
+                    ).strip()
                 result["verification"] = verify
             else:
                 lesson.status = "failed"
@@ -120,19 +159,85 @@ class SelfEvolutionCore:
         lesson.result = result
         self.lesson_store.update(lesson)
         self._record_run(lesson, target_file, goal, lesson.status, result)
+        self._record_code_change(lesson, target_file, goal, before, result)
         return result
 
     def _choose_target_file(self, lesson: AgentLesson) -> str:
+        # 1) 优先用 lesson.suggested_files 中真实存在且 allow 的
         candidates = lesson.suggested_files or []
         for candidate in candidates:
             if self._check_boundary(candidate) == "allow":
                 path = self.project_root / candidate
                 if path.exists() and path.is_file():
                     return candidate
+
+        # 2) suggested_files 全是虚构路径 → 在 SAFE_TARGETS 中按 lesson 内容打分挑一个
+        chosen = self._pick_safe_target(lesson)
+        if chosen and chosen != SAFE_LESSON_TARGET:
+            path = self.project_root / chosen
+            if path.exists() and path.is_file():
+                return chosen
+
+        # 3) 最后兜底
         self._ensure_safe_lesson_target()
         return SAFE_LESSON_TARGET
 
+    def _pick_safe_target(self, lesson: AgentLesson) -> str:
+        """根据 lesson.capability + source 关键词匹配 SAFE_TARGETS。
+        无 LLM 调用，纯启发式 — 失败也不会破坏流程。"""
+        text = " ".join([
+            (lesson.capability or "").lower(),
+            (lesson.pattern or "").lower(),
+            (lesson.adaptation or "").lower(),
+            (lesson.source or "").lower(),
+            (lesson.topic or "").lower(),
+        ])
+
+        # 关键词 → 文件 映射（按优先级）
+        rules = [
+            (("autogen", "多agent", "多 agent", "角色分", "role", "协作", "交接", "handoff", "team"),
+             "src/dev_team.py"),
+            (("copilot", "continue", "上下文感知", "context-aware", "active learn", "主动学习",
+              "ide ", "建议生成", "代码建议"),
+             "src/active_learner.py"),
+            (("aider", "git ", "patch", "diff", "代码审查", "critic", "review", "lint"),
+             "src/critic.py"),
+            (("最小补丁", "minimal patch", "提交前验证", "pre-commit", "git感知", "git 感知",
+              "change log", "变更日志"),
+             "src/code_change_log.py"),
+            (("openhands", "task split", "任务拆解", "工作区执行", "错误恢复",
+              "test", "测试", "校验", "verify"),
+             "src/testing.py"),
+            (("partner", "buddy", "搭档", "陪伴", "对话伙伴"),
+             "src/buddy.py"),
+        ]
+
+        for keywords, target in rules:
+            if any(kw in text for kw in keywords):
+                # 命中规则但目标文件不在白名单或不存在时跳过
+                if target in SAFE_TARGETS and (self.project_root / target).is_file():
+                    return target
+
+        return SAFE_LESSON_TARGET
+
     def _build_goal(self, lesson: AgentLesson, target_file: str) -> str:
+        """向后兼容包装：只返回 goal 字符串。新代码应该用 _build_evolution_plan。"""
+        plan = self._build_evolution_plan(lesson, target_file)
+        return plan.get("goal", "")
+
+    def _build_evolution_plan(self, lesson: AgentLesson, target_file: str) -> Dict[str, Any]:
+        """生成一次进化的完整规划。**强制 LLM 写明要新增的函数名和签名**，
+        让后续 _verify 能做真实的可调用性检查。
+
+        返回:
+            {
+                "goal": "具体改进目标（句子）",
+                "expected_functions": [
+                    {"name": "fn_name", "signature": "fn_name(arg1, arg2)", "kind": "function"},
+                    ...
+                ],
+            }
+        """
         prompt = f"""把以下 Agent 学习经验转成冷小北对指定源码文件的一次小步改进目标。
 
 目标文件: {target_file}
@@ -147,15 +252,74 @@ class SelfEvolutionCore:
 - 不重写架构
 - 不添加外部依赖
 - 不修改安全底线
+- **必须给出至少 1 个具体函数名（snake_case），后续会用 AST 检查这个函数是否真的被加进去**
 
-只返回 JSON: {{"goal": "一句具体源码改进目标"}}"""
+只返回 JSON:
+{{
+  "goal": "一句具体源码改进目标，必须提到要新增的函数名",
+  "expected_functions": [
+    {{"name": "snake_case_function_name", "signature": "name(arg1: type, arg2: type) -> type", "kind": "function"}}
+  ]
+}}
+
+示例好的输出（不要照抄）:
+{{
+  "goal": "在 {target_file} 中新增函数 assign_role_by_task_type，根据任务类型字符串返回对应的角色名",
+  "expected_functions": [
+    {{"name": "assign_role_by_task_type", "signature": "assign_role_by_task_type(task_type: str) -> str", "kind": "function"}}
+  ]
+}}"""
         try:
-            data = extract_json(chat(prompt, system="你是冷小北自进化规划器。只返回JSON。", temperature=0.2))
-            return str(data.get("goal") or lesson.adaptation or lesson.pattern)
+            data = extract_json(chat(
+                prompt,
+                system="你是冷小北自进化规划器。只返回JSON，goal 必须提到具体函数名。",
+                temperature=0.2,
+                use_cache=False,
+            ))
         except Exception:
-            return lesson.adaptation or lesson.pattern or f"吸收 {lesson.source} 的 {lesson.capability} 能力"
+            data = {}
 
-    def _verify(self) -> Dict[str, Any]:
+        goal = str(data.get("goal") or lesson.adaptation or lesson.pattern or "")
+        expected = data.get("expected_functions") or []
+        if not isinstance(expected, list):
+            expected = []
+
+        # 规范化 expected_functions
+        normalized: List[Dict[str, Any]] = []
+        for item in expected[:5]:
+            if isinstance(item, str):
+                normalized.append({"name": item, "signature": f"{item}()", "kind": "function"})
+            elif isinstance(item, dict) and item.get("name"):
+                normalized.append({
+                    "name": str(item["name"]).strip(),
+                    "signature": str(item.get("signature") or f"{item['name']}()"),
+                    "kind": str(item.get("kind") or "function"),
+                })
+
+        # 兜底：如果 LLM 没给出函数名，从 goal 文本中提取，再补一个
+        if not normalized:
+            import re as _re
+            for pat in (r"函数\s*[`\"']?([a-z_][\w]*)", r"\b([a-z_][a-z0-9_]{2,})\s*\("):
+                m = _re.search(pat, goal)
+                if m and m.group(1) not in ("self", "args", "kwargs"):
+                    normalized.append({
+                        "name": m.group(1),
+                        "signature": f"{m.group(1)}()",
+                        "kind": "function",
+                    })
+                    break
+
+        return {"goal": goal, "expected_functions": normalized}
+
+    def _verify(self, target_file: str = "", expected_functions: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+        """跑核心测试 + 可调用性检查。
+
+        如果 expected_functions 非空，会做两层验证：
+          1. AST 扫 target_file，看每个 expected name 是否定义
+          2. import target_file 模块，看名字真的能 getattr 出来且 callable
+
+        任一层失败 → success=False，lesson 会被标 failed。
+        """
         commands = [
             ["python3", "-m", "compileall", "-q", "src"],
             ["pytest", "tests/test_core_modules.py", "-q"],
@@ -177,11 +341,163 @@ class SelfEvolutionCore:
                     "stderr": proc.stderr[-1000:],
                 })
                 if proc.returncode != 0:
-                    return {"success": False, "outputs": outputs}
+                    return {"success": False, "outputs": outputs, "reason": "tests failed"}
             except Exception as exc:
                 outputs.append({"command": " ".join(cmd), "error": str(exc)})
-                return {"success": False, "outputs": outputs}
-        return {"success": True, "outputs": outputs}
+                return {"success": False, "outputs": outputs, "reason": f"test exception: {exc}"}
+
+        # 能力可调用性闭环检查
+        cap_check = self._check_capability(target_file, expected_functions or [])
+        result = {
+            "success": cap_check["all_callable"],
+            "outputs": outputs,
+            "capability_check": cap_check,
+        }
+        if not cap_check["all_callable"]:
+            result["reason"] = (
+                "expected_functions 中有函数未真的被加进去或不可调用 — "
+                f"missing={cap_check.get('missing')}, "
+                f"errors={cap_check.get('callable_errors')}"
+            )
+        return result
+
+    def _check_capability(self, target_file: str, expected_functions: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """对每个 expected function，先 AST 看是否定义，再 import 看是否可调用。"""
+        import ast as _ast
+        import importlib as _il
+        import sys as _sys
+
+        if not expected_functions or not target_file:
+            return {
+                "all_callable": True,
+                "skipped": True,
+                "reason": "no expected_functions to check",
+            }
+
+        path = self.project_root / target_file
+        if not path.is_file():
+            return {
+                "all_callable": False,
+                "missing": [f["name"] for f in expected_functions],
+                "reason": "target file missing",
+            }
+
+        # AST 扫
+        try:
+            tree = _ast.parse(path.read_text(encoding="utf-8"))
+            defined = set()
+            for node in _ast.walk(tree):
+                if isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef, _ast.ClassDef)):
+                    defined.add(node.name)
+        except Exception as exc:
+            return {
+                "all_callable": False,
+                "missing": [f["name"] for f in expected_functions],
+                "reason": f"AST parse failed: {exc}",
+            }
+
+        expected_names = [f["name"] for f in expected_functions]
+        found = [n for n in expected_names if n in defined]
+        missing = [n for n in expected_names if n not in defined]
+
+        # import + getattr + callable 三连检查
+        callable_errors: List[str] = []
+        if found:
+            try:
+                mod_name = target_file.replace("/", ".").rsplit(".py", 1)[0]
+                if mod_name in _sys.modules:
+                    module = _il.reload(_sys.modules[mod_name])
+                else:
+                    module = _il.import_module(mod_name)
+                for name in found:
+                    obj = getattr(module, name, None)
+                    if obj is None:
+                        callable_errors.append(f"{name}: 模块顶层找不到（可能被嵌在 class 内）")
+                    elif not callable(obj):
+                        callable_errors.append(f"{name}: 存在但不可调用 (type={type(obj).__name__})")
+            except Exception as exc:
+                callable_errors.append(f"import 失败: {exc}")
+
+        all_callable = bool(found) and not missing and not callable_errors
+        return {
+            "all_callable": all_callable,
+            "expected": expected_names,
+            "found": found,
+            "missing": missing,
+            "callable_errors": callable_errors,
+        }
+
+    def _assess_change_quality(self, target_file: str, before: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+        """检查改动是否"实质性"——新增/修改了函数/类，而不是只追加了元数据。
+
+        substantive=True 的判定：
+        - 新文件 (before 不存在)
+        - 或新增了函数/类
+        - 或修改了已有函数的函数体 hash
+        """
+        import ast
+        import hashlib
+
+        before_item = before.get(target_file) or {}
+        after_path = self.project_root / target_file
+
+        if not after_path.is_file():
+            return {"substantive": False, "reason": "after file missing"}
+
+        try:
+            after_src = after_path.read_text(encoding="utf-8")
+        except Exception as exc:
+            return {"substantive": False, "reason": f"cannot read after: {exc}"}
+
+        def _func_class_signatures(src: str) -> Dict[str, str]:
+            try:
+                tree = ast.parse(src)
+            except Exception:
+                return {}
+            sigs: Dict[str, str] = {}
+            for node in ast.walk(tree):
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    try:
+                        body_src = ast.unparse(node) if hasattr(ast, "unparse") else str(node.body)
+                    except Exception:
+                        body_src = node.name
+                    sigs[node.name] = hashlib.sha256(body_src.encode("utf-8")).hexdigest()
+            return sigs
+
+        before_src = before_item.get("content", "") if before_item.get("exists") else ""
+
+        if not before_src:
+            # 新文件，只要有定义就算实质
+            after_sigs = _func_class_signatures(after_src)
+            return {
+                "substantive": bool(after_sigs),
+                "reason": "new file" if after_sigs else "new file but no defs",
+                "added_or_changed": list(after_sigs.keys()),
+                "before_def_count": 0,
+                "after_def_count": len(after_sigs),
+            }
+
+        before_sigs = _func_class_signatures(before_src)
+        after_sigs = _func_class_signatures(after_src)
+
+        added = [n for n in after_sigs if n not in before_sigs]
+        changed = [n for n in after_sigs if n in before_sigs and after_sigs[n] != before_sigs[n]]
+        removed = [n for n in before_sigs if n not in after_sigs]
+
+        substantive = bool(added or changed or removed)
+        return {
+            "substantive": substantive,
+            "reason": (
+                f"added={len(added)} changed={len(changed)} removed={len(removed)}"
+                if substantive else
+                f"only non-def content changed (bytes diff: {len(after_src) - len(before_src):+d})"
+            ),
+            "added": added,
+            "changed_funcs": changed,
+            "removed": removed,
+            "before_def_count": len(before_sigs),
+            "after_def_count": len(after_sigs),
+        }
 
     def _apply_to_learned_capabilities(self, lesson: AgentLesson, goal: str) -> Dict[str, Any]:
         self._ensure_safe_lesson_target()
@@ -263,6 +579,42 @@ class SelfEvolutionCore:
         )
         runs.append(run.to_dict())
         atomic_write_json(str(self.runs_path), runs)
+
+    def _record_code_change(
+        self,
+        lesson: AgentLesson,
+        target_file: str,
+        goal: str,
+        before: Dict[str, Dict[str, Any]],
+        result: Dict[str, Any],
+    ) -> None:
+        paths = {target_file, SAFE_LESSON_TARGET}
+        file_path = result.get("file_path") if isinstance(result, dict) else ""
+        if file_path:
+            try:
+                paths.add(str(Path(file_path).resolve().relative_to(self.project_root)))
+            except Exception:
+                pass
+        fallback_target = result.get("fallback_target") if isinstance(result, dict) else ""
+        if fallback_target:
+            paths.add(str(fallback_target))
+        verification = result.get("verification", {}) if isinstance(result, dict) else {}
+        self.change_logger.record(
+            actor="lengxiaobei",
+            trigger="self_evolution.apply_lesson",
+            summary=f"应用 lesson {lesson.id}: {lesson.capability}",
+            before=before,
+            after_paths=paths,
+            result=result,
+            verification=verification,
+            metadata={
+                "lesson_id": lesson.id,
+                "topic": lesson.topic,
+                "source": lesson.source,
+                "target_file": target_file,
+                "goal": goal,
+            },
+        )
 
     @staticmethod
     def _check_boundary(file_path: str) -> str:

@@ -52,7 +52,7 @@ function createWindow() {
 
 // 加载前端：优先从后端加载（API 同源可用），回退到本地文件
 function loadFrontend() {
-  const tryBackend = () => {
+  const tryBackend = (timeoutMs = 3000) => {
     return new Promise((resolve, reject) => {
       const req = http.get(`${API_BASE}/`, (res) => {
         if (res.statusCode === 200) {
@@ -63,17 +63,27 @@ function loadFrontend() {
         res.resume();
       });
       req.on('error', reject);
-      req.setTimeout(3000, () => { req.destroy(); reject(new Error('后端连接超时')); });
+      req.setTimeout(timeoutMs, () => { req.destroy(); reject(new Error('后端连接超时')); });
     });
   };
 
-  tryBackend().then(() => {
-    console.log(`从后端加载前端: ${API_BASE}`);
-    mainWindow.loadURL(`${API_BASE}/`);
-  }).catch(() => {
-    console.log('后端未启动，从本地文件加载（API 请求将不可用）');
-    mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
-  });
+  const deadline = Date.now() + 25000;
+  const waitForBackend = () => {
+    tryBackend(1500).then(() => {
+      console.log(`从后端加载前端: ${API_BASE}`);
+      mainWindow.loadURL(`${API_BASE}/`);
+    }).catch((error) => {
+      if (Date.now() < deadline) {
+        console.log(`等待后端启动: ${error.message}`);
+        setTimeout(waitForBackend, 1000);
+        return;
+      }
+      console.log('后端未启动，从本地文件加载（API 请求将通过 IPC 代理）');
+      mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+    });
+  };
+
+  waitForBackend();
 }
 
 // 启动后端 lx_web.py

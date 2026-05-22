@@ -81,9 +81,12 @@ models:
     #   api_key: "xxx"
     # anthropic:
     #   api_key: "sk-ant-xxx"
+    # mimo:
+    #   api_key: "tp-xxx"  # 推荐放到 ~/.openclaw/openclaw.json，不写入仓库
 
   # 启用的模型列表（注释即禁用）
   enabled:
+    - "mimo/MiMo-V2.5-Pro"
     - "minimax/MiniMax-M2.7"
     - "volcengine/doubao-seed-2.0-pro"
     - "volcengine/deepseek-v3.2"
@@ -91,7 +94,7 @@ models:
     - "bailian/qwen3-coder-plus"
 
   # 全局参数
-  default: "minimax/MiniMax-M2.7"
+  default: "mimo/MiMo-V2.5-Pro"
   temperature: 0.7
   max_tokens: 4096
   timeout: 120

@@ -1,0 +1,64 @@
+[
+  {
+    "id": "learn_1",
+    "topic": "自主学习 OpenHands 的任务拆解、工作区执行和错误恢复能力，并提炼一个可落地改进",
+    "url": "https://github.com/All-Hands-AI/OpenHands",
+    "status": "learned",
+    "created_at": 1779420584.2187479,
+    "last_attempt_at": 1779437577.499697,
+    "lesson_id": "lesson_1779437577",
+    "error": ""
+  },
+  {
+    "id": "learn_2",
+    "topic": "自主学习 Aider 的 git 感知代码修改、最小补丁和提交前验证能力，并提炼一个可落地改进",
+    "url": "https://github.com/Aider-AI/aider",
+    "status": "learned",
+    "created_at": 1779420584.2187479,
+    "last_attempt_at": 1779438419.812619,
+    "lesson_id": "lesson_1779438419",
+    "error": ""
+  },
+  {
+    "id": "learn_3",
+    "topic": "自主学习 Continue 的 IDE 上下文、代码库索引和开发者交互设计能力，并提炼一个可落地改进",
+    "url": "https://github.com/continuedev/continue",
+    "status": "learned",
+    "created_at": 1779420584.2187479,
+    "last_attempt_at": 1779442634.7958632,
+    "lesson_id": "lesson_1779442634",
+    "error": ""
+  },
+  {
+    "id": "learn_4",
+    "topic": "自主学习 AutoGen 的多 Agent 协作、角色分工和任务交接机制，并提炼一个可落地改进",
+    "url": "https://github.com/microsoft/autogen",
+    "status": "learned",
+    "created_at": 1779420584.2187479,
+    "last_attempt_at": 1779435836.9675462,
+    "lesson_id": "lesson_1779435836",
+    "error": ""
+  },
+  {
+    "id": "learn_5",
+    "topic": "自主学习 Claude Code 的计划执行、工具调用反馈和长任务汇报体验，并提炼一个可落地改进",
+    "url": "",
+    "status": "learned",
+    "created_at": 1779420584.2187479,
+    "last_attempt_at": 1779436706.4455638,
+    "lesson_id": "lesson_1779436706",
+    "error": ""
+  },
+  {
+    "id": "introspect_1779443560",
+    "topic": "新增一个自我反思工具模块，用于分析系统日志、工具调用历史和用户反馈，以识别设计模式中的问题，并在用户询问时输出具体建议",
+    "url": "",
+    "status": "pending",
+    "created_at": 1779443560.8394291,
+    "source": "self_reflection",
+    "kind": "introspection",
+    "priority": 3,
+    "gap": "缺乏自我诊断工具，无法主动识别和报告设计缺陷",
+    "trigger_context": "用户询问冷小北能否发现自身设计问题。冷小北调用了autonomy_tick工具尝试自主优化，但系统返回busy状态因手动优化运行，优化被跳过，冷小北未直接分析或报告设计缺陷。"
+  }
+]

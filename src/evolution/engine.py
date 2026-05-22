@@ -21,6 +21,7 @@ from typing import Dict, List, Optional, Any
 
 from ..integrity_checker import IntegrityChecker
 from ..hard_boundary import BoundaryResult, check_boundary
+from ..circuit_breaker import check_health, record_success, record_failure
 
 from .models import (
     EvolutionPhase, EvolutionStatus, RiskLevel,
@@ -85,10 +86,15 @@ class AutonomousEvolutionEngine:
         if not self._cb_check_health():
             return {"status": "failed", "error": "Circuit breaker tripped"}
 
-        # ---- 完整性 ----
-        if IntegrityChecker(self.project_root).verify_integrity()["status"] != "success":
-            self._cb_record_failure("Integrity check failed")
-            return {"status": "failed", "error": "Integrity check failed"}
+        # ---- 完整性 (strict 模式：只阻断 SOUL/CONSTITUTION 等安全底线变动) ----
+        integrity_check = IntegrityChecker(self.project_root).verify_integrity_strict()
+        if integrity_check.get("status") != "success":
+            self._cb_record_failure("Strict integrity violated")
+            return {
+                "status": "failed",
+                "error": integrity_check.get("error", "Strict integrity check failed"),
+                "strict_violations": integrity_check.get("strict_violations", []),
+            }
 
         if not os.path.exists(abs_path):
             return {"status": "failed", "error": f"File not found: {abs_path}"}

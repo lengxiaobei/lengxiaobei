@@ -1,0 +1,185 @@
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779423597.121595, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 18, "latest_id": "autonomy_1779423597"}, "timestamp": 1779423684.8966231, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779423597", "status": "success", "elapsed_seconds": 87.773, "reason": "scheduled"}, "timestamp": 1779423684.8967512, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779423597"}, "timestamp": 1779423684.8968241, "source": "autonomy"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "manual", "direction": "integration-test"}, "timestamp": 1779423962.434228, "source": "autonomy"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779423985.912342, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 19, "latest_id": "autonomy_1779423962"}, "timestamp": 1779424041.046228, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779423962", "status": "success", "elapsed_seconds": 78.61, "reason": "manual"}, "timestamp": 1779424041.046436, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779423962"}, "timestamp": 1779424041.046528, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 20, "latest_id": "autonomy_1779423985"}, "timestamp": 1779424072.531991, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779423985", "status": "success", "elapsed_seconds": 86.618, "reason": "scheduled"}, "timestamp": 1779424072.532128, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779423985"}, "timestamp": 1779424072.532235, "source": "autonomy"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779424246.0399969, "source": "autonomy"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "manual", "direction": "integration-test"}, "timestamp": 1779424303.948639, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 21, "latest_id": "autonomy_1779424246"}, "timestamp": 1779424339.685108, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779424246", "status": "success", "elapsed_seconds": 93.643, "reason": "scheduled"}, "timestamp": 1779424339.6853719, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779424246"}, "timestamp": 1779424339.685525, "source": "autonomy"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "manual", "direction": "integration-test"}, "timestamp": 1779424586.849018, "source": "autonomy"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779424640.694166, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 22, "latest_id": "autonomy_1779424640"}, "timestamp": 1779424749.916807, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779424640", "status": "success", "elapsed_seconds": 109.221, "reason": "scheduled"}, "timestamp": 1779424749.916915, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779424640"}, "timestamp": 1779424749.917036, "source": "autonomy"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779425051.621978, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 23, "latest_id": "autonomy_1779425051"}, "timestamp": 1779425139.958636, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779425051", "status": "success", "elapsed_seconds": 88.335, "reason": "scheduled"}, "timestamp": 1779425139.9587579, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779425051"}, "timestamp": 1779425139.9589708, "source": "autonomy"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779425441.673069, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 24, "latest_id": "autonomy_1779425441"}, "timestamp": 1779425531.6843882, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779425441", "status": "success", "elapsed_seconds": 90.01, "reason": "scheduled"}, "timestamp": 1779425531.6845, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779425441"}, "timestamp": 1779425531.684698, "source": "autonomy"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779425833.378848, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 25, "latest_id": "autonomy_1779425833"}, "timestamp": 1779425942.4733372, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779425833", "status": "success", "elapsed_seconds": 109.092, "reason": "scheduled"}, "timestamp": 1779425942.4734788, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779425833"}, "timestamp": 1779425942.473685, "source": "autonomy"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779426244.150765, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 26, "latest_id": "autonomy_1779426244"}, "timestamp": 1779426346.890568, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779426244", "status": "success", "elapsed_seconds": 102.738, "reason": "scheduled"}, "timestamp": 1779426346.8906791, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779426244"}, "timestamp": 1779426346.890819, "source": "autonomy"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779426648.683477, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 27, "latest_id": "autonomy_1779426648"}, "timestamp": 1779426752.7784472, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779426648", "status": "success", "elapsed_seconds": 104.093, "reason": "scheduled"}, "timestamp": 1779426752.778574, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779426648"}, "timestamp": 1779426752.7787242, "source": "autonomy"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779427054.515887, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 28, "latest_id": "autonomy_1779427054"}, "timestamp": 1779427154.672746, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779427054", "status": "success", "elapsed_seconds": 100.155, "reason": "scheduled"}, "timestamp": 1779427154.672864, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779427054"}, "timestamp": 1779427154.6729898, "source": "autonomy"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779427456.38361, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 29, "latest_id": "autonomy_1779427456"}, "timestamp": 1779427563.192019, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779427456", "status": "success", "elapsed_seconds": 106.806, "reason": "scheduled"}, "timestamp": 1779427563.192163, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779427456"}, "timestamp": 1779427563.192325, "source": "autonomy"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779427864.137322, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 30, "latest_id": "autonomy_1779427864"}, "timestamp": 1779427970.4309819, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779427864", "status": "success", "elapsed_seconds": 106.292, "reason": "scheduled"}, "timestamp": 1779427970.4311, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779427864"}, "timestamp": 1779427970.431224, "source": "autonomy"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779428271.374157, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 31, "latest_id": "autonomy_1779428271"}, "timestamp": 1779428373.034573, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779428271", "status": "success", "elapsed_seconds": 101.658, "reason": "scheduled"}, "timestamp": 1779428373.034712, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779428271"}, "timestamp": 1779428373.034858, "source": "autonomy"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779428673.968311, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 32, "latest_id": "autonomy_1779428673"}, "timestamp": 1779428768.3853838, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779428673", "status": "success", "elapsed_seconds": 94.415, "reason": "scheduled"}, "timestamp": 1779428768.3855429, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779428673"}, "timestamp": 1779428768.3856819, "source": "autonomy"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779429069.870902, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 33, "latest_id": "autonomy_1779429069"}, "timestamp": 1779429174.034511, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779429069", "status": "success", "elapsed_seconds": 104.161, "reason": "scheduled"}, "timestamp": 1779429174.034643, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779429069"}, "timestamp": 1779429174.034831, "source": "autonomy"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779429475.802725, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 34, "latest_id": "autonomy_1779429475"}, "timestamp": 1779429575.309885, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779429475", "status": "success", "elapsed_seconds": 99.505, "reason": "scheduled"}, "timestamp": 1779429575.310018, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779429475"}, "timestamp": 1779429575.31021, "source": "autonomy"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779429877.0180302, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 35, "latest_id": "autonomy_1779429877"}, "timestamp": 1779429992.5176399, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779429877", "status": "success", "elapsed_seconds": 115.497, "reason": "scheduled"}, "timestamp": 1779429992.517793, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779429877"}, "timestamp": 1779429992.517941, "source": "autonomy"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779430294.16153, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 36, "latest_id": "autonomy_1779430294"}, "timestamp": 1779430387.7356212, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779430294", "status": "success", "elapsed_seconds": 93.572, "reason": "scheduled"}, "timestamp": 1779430387.7357812, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779430294"}, "timestamp": 1779430387.735958, "source": "autonomy"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779430689.5127501, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 37, "latest_id": "autonomy_1779430689"}, "timestamp": 1779430824.498218, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779430689", "status": "success", "elapsed_seconds": 134.983, "reason": "scheduled"}, "timestamp": 1779430824.4983711, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779430689"}, "timestamp": 1779430824.498518, "source": "autonomy"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779431126.2600698, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 38, "latest_id": "autonomy_1779431126"}, "timestamp": 1779431244.99743, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779431126", "status": "success", "elapsed_seconds": 118.735, "reason": "scheduled"}, "timestamp": 1779431244.9975622, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779431126"}, "timestamp": 1779431244.997754, "source": "autonomy"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779431546.69161, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 39, "latest_id": "autonomy_1779431546"}, "timestamp": 1779431670.808138, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779431546", "status": "success", "elapsed_seconds": 124.114, "reason": "scheduled"}, "timestamp": 1779431670.8082712, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779431546"}, "timestamp": 1779431670.8085, "source": "autonomy"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779431971.785183, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 40, "latest_id": "autonomy_1779431971"}, "timestamp": 1779432070.373149, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779431971", "status": "success", "elapsed_seconds": 98.586, "reason": "scheduled"}, "timestamp": 1779432070.3732722, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779431971"}, "timestamp": 1779432070.3733351, "source": "autonomy"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779432372.1226308, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 41, "latest_id": "autonomy_1779432372"}, "timestamp": 1779432503.832006, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779432372", "status": "success", "elapsed_seconds": 131.707, "reason": "scheduled"}, "timestamp": 1779432503.832171, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779432372"}, "timestamp": 1779432503.83225, "source": "autonomy"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779432805.7389371, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 42, "latest_id": "autonomy_1779432805"}, "timestamp": 1779432903.070545, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779432805", "status": "success", "elapsed_seconds": 97.329, "reason": "scheduled"}, "timestamp": 1779432903.070689, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779432805"}, "timestamp": 1779432903.070739, "source": "autonomy"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779433205.0393002, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 43, "latest_id": "autonomy_1779433205"}, "timestamp": 1779433357.8435771, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779433205", "status": "success", "elapsed_seconds": 152.802, "reason": "scheduled"}, "timestamp": 1779433357.8437178, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779433205"}, "timestamp": 1779433357.843769, "source": "autonomy"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779433659.65967, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 44, "latest_id": "autonomy_1779433659"}, "timestamp": 1779433785.637266, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779433659", "status": "success", "elapsed_seconds": 125.975, "reason": "scheduled"}, "timestamp": 1779433785.6373692, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779433659"}, "timestamp": 1779433785.637419, "source": "autonomy"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779434087.527201, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 45, "latest_id": "autonomy_1779434087"}, "timestamp": 1779434217.217952, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779434087", "status": "success", "elapsed_seconds": 129.688, "reason": "scheduled"}, "timestamp": 1779434217.21809, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779434087"}, "timestamp": 1779434217.218187, "source": "autonomy"}
+{"event_type": "chat.tool.started", "data": {"tool": "autonomy_start", "args": {"interval_seconds": 300}}, "timestamp": 1779434327.198336, "source": "chat"}
+{"event_type": "chat.tool.finished", "data": {"tool": "autonomy_start", "ok": true, "elapsed_seconds": 0.005}, "timestamp": 1779434327.203389, "source": "chat"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779434518.17288, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 46, "latest_id": "autonomy_1779434518"}, "timestamp": 1779434649.5736792, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779434518", "status": "success", "elapsed_seconds": 131.398, "reason": "scheduled"}, "timestamp": 1779434649.573786, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779434518"}, "timestamp": 1779434649.573854, "source": "autonomy"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779434951.3028321, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 47, "latest_id": "autonomy_1779434951"}, "timestamp": 1779435090.305402, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779434951", "status": "success", "elapsed_seconds": 139.0, "reason": "scheduled"}, "timestamp": 1779435090.305535, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779434951"}, "timestamp": 1779435090.3056178, "source": "autonomy"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779435392.0355682, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 48, "latest_id": "autonomy_1779435392"}, "timestamp": 1779435508.1160269, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779435392", "status": "success", "elapsed_seconds": 116.078, "reason": "scheduled"}, "timestamp": 1779435508.11615, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779435392"}, "timestamp": 1779435508.116256, "source": "autonomy"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779435809.894594, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 49, "latest_id": "autonomy_1779435809"}, "timestamp": 1779435939.66991, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779435809", "status": "success", "elapsed_seconds": 129.772, "reason": "scheduled"}, "timestamp": 1779435939.670045, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779435809"}, "timestamp": 1779435939.67013, "source": "autonomy"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779436241.444292, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 50, "latest_id": "autonomy_1779436241"}, "timestamp": 1779436372.217193, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779436241", "status": "success", "elapsed_seconds": 130.77, "reason": "scheduled"}, "timestamp": 1779436372.2173162, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779436241"}, "timestamp": 1779436372.217422, "source": "autonomy"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779436673.984904, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 51, "latest_id": "autonomy_1779436673"}, "timestamp": 1779436813.0039139, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779436673", "status": "success", "elapsed_seconds": 139.016, "reason": "scheduled"}, "timestamp": 1779436813.004056, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779436673"}, "timestamp": 1779436813.0041401, "source": "autonomy"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779437114.8028631, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 52, "latest_id": "autonomy_1779437114"}, "timestamp": 1779437245.884574, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779437114", "status": "success", "elapsed_seconds": 131.079, "reason": "scheduled"}, "timestamp": 1779437245.8846972, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779437114"}, "timestamp": 1779437245.88478, "source": "autonomy"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779437547.684036, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 53, "latest_id": "autonomy_1779437547"}, "timestamp": 1779437677.7199302, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779437547", "status": "success", "elapsed_seconds": 130.033, "reason": "scheduled"}, "timestamp": 1779437677.720067, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779437547"}, "timestamp": 1779437677.720159, "source": "autonomy"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779437979.423424, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 54, "latest_id": "autonomy_1779437979"}, "timestamp": 1779438080.128479, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779437979", "status": "success", "elapsed_seconds": 100.702, "reason": "scheduled"}, "timestamp": 1779438080.128609, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779437979"}, "timestamp": 1779438080.128692, "source": "autonomy"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779438381.875406, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 55, "latest_id": "autonomy_1779438381"}, "timestamp": 1779438502.061661, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779438381", "status": "success", "elapsed_seconds": 120.183, "reason": "scheduled"}, "timestamp": 1779438502.0617971, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779438381"}, "timestamp": 1779438502.061884, "source": "autonomy"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779438803.2138848, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 56, "latest_id": "autonomy_1779438803"}, "timestamp": 1779438900.316745, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779438803", "status": "success", "elapsed_seconds": 97.1, "reason": "scheduled"}, "timestamp": 1779438900.316863, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779438803"}, "timestamp": 1779438900.31696, "source": "autonomy"}
+{"event_type": "runtime.restart_scheduled", "data": {"reason": "verify_runtime_restart", "delay_seconds": 0.5}, "timestamp": 1779441629.595739, "source": "web"}
+{"event_type": "runtime.restarting", "data": {"reason": "verify_runtime_restart"}, "timestamp": 1779441630.101107, "source": "web"}
+{"event_type": "runtime.restart_scheduled", "data": {"reason": "verify_runtime_restart", "delay_seconds": 0.5}, "timestamp": 1779441698.739635, "source": "web"}
+{"event_type": "runtime.restarting", "data": {"reason": "verify_runtime_restart"}, "timestamp": 1779441699.240798, "source": "web"}
+{"event_type": "runtime.restart_scheduled", "data": {"reason": "verify_runtime_restart_v2", "delay_seconds": 0.5}, "timestamp": 1779441805.769708, "source": "web"}
+{"event_type": "runtime.restarting", "data": {"reason": "verify_runtime_restart_v2"}, "timestamp": 1779441806.275052, "source": "web"}
+{"event_type": "runtime.restart_scheduled", "data": {"reason": "verify_runtime_restart_v3", "delay_seconds": 0.5}, "timestamp": 1779441919.495646, "source": "web"}
+{"event_type": "runtime.restarting", "data": {"reason": "verify_runtime_restart_v3"}, "timestamp": 1779441920.001101, "source": "web"}
+{"event_type": "chat.tool.started", "data": {"tool": "autonomy_tick", "args": {"direction": "系统自检优化"}}, "timestamp": 1779442607.3901482, "source": "chat"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "manual", "direction": "系统自检优化"}, "timestamp": 1779442607.3909929, "source": "autonomy"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 57, "latest_id": "autonomy_1779442607"}, "timestamp": 1779442717.294707, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779442607", "status": "success", "elapsed_seconds": 109.901, "reason": "manual"}, "timestamp": 1779442717.294805, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779442607"}, "timestamp": 1779442717.294841, "source": "autonomy"}
+{"event_type": "chat.tool.finished", "data": {"tool": "autonomy_tick", "ok": true, "elapsed_seconds": 109.905}, "timestamp": 1779442717.295003, "source": "chat"}
+{"event_type": "runtime.restart_scheduled", "data": {"reason": "autonomy_repair_loop_updated", "delay_seconds": 0.8}, "timestamp": 1779443398.546475, "source": "web"}
+{"event_type": "runtime.restarting", "data": {"reason": "autonomy_repair_loop_updated"}, "timestamp": 1779443399.347967, "source": "web"}
+{"event_type": "autonomy.tick.started", "data": {"reason": "scheduled", "direction": ""}, "timestamp": 1779443423.122048, "source": "autonomy"}
+{"event_type": "chat.tool.started", "data": {"tool": "autonomy_tick", "args": {"direction": "诊断自身设计问题和优化点"}}, "timestamp": 1779443510.577248, "source": "chat"}
+{"event_type": "chat.tool.finished", "data": {"tool": "autonomy_tick", "ok": true, "elapsed_seconds": 0.001}, "timestamp": 1779443510.578005, "source": "chat"}
+{"event_type": "learning.gap.discovered", "data": {"gap": "缺乏自我诊断工具，无法主动识别和报告设计缺陷", "suggested_topic": "新增一个自我反思工具模块，用于分析系统日志、工具调用历史和用户反馈，以识别设计模式中的问题，并在用户询问时输出具体建议", "priority": 3, "kind": "introspection", "trigger": "chat"}, "timestamp": 1779443560.8398879, "source": "reflection"}
+{"event_type": "memory.updated", "data": {"file": "autonomy_runs.json", "count": 58, "latest_id": "autonomy_1779443423"}, "timestamp": 1779443638.5356271, "source": "memory"}
+{"event_type": "autonomy.tick.finished", "data": {"record_id": "autonomy_1779443423", "status": "success", "elapsed_seconds": 215.41, "reason": "scheduled"}, "timestamp": 1779443638.5357609, "source": "autonomy"}
+{"event_type": "evolution.completed", "data": {"status": "success", "run_id": "autonomy_1779443423"}, "timestamp": 1779443638.5359612, "source": "autonomy"}
+{"event_type": "runtime.restart_scheduled", "data": {"reason": "autonomy_tick_source_changed", "delay_seconds": 1.5}, "timestamp": 1779443638.536265, "source": "web"}
+{"event_type": "runtime.restarting", "data": {"reason": "autonomy_tick_source_changed"}, "timestamp": 1779443640.042058, "source": "web"}

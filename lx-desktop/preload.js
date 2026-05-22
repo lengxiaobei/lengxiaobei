@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 const API_TIMEOUT = 30000;
+const API_BASE = 'http://127.0.0.1:8088';
 let requestIdCounter = 0;
 
 // 检测当前是否运行在 http:// 环境（后端同源模式）
@@ -12,6 +13,7 @@ function isBackendMode() {
 contextBridge.exposeInMainWorld('electronAPI', {
   // 检测运行模式
   isBackendMode: () => isBackendMode(),
+  getAPIBase: () => API_BASE,
 
   // API 请求：后端模式下直接 fetch，file:// 模式下走 IPC 代理
   apiRequest: (url, options = {}) => {

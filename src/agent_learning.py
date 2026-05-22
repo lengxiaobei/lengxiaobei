@@ -105,9 +105,20 @@ class AgentLearner:
         self.project_root = Path(project_root)
         self.store = AgentLearningStore(project_root)
 
-    def learn(self, topic: str, url: str = "") -> AgentLesson:
-        evidence = self._fetch_url(url) if url else ""
-        prompt = self._build_prompt(topic, evidence)
+    def learn(self, topic: str, url: str = "", kind: str = "external", gap: str = "") -> AgentLesson:
+        """提炼一条学习方向为 lesson。
+
+        kind:
+            "external"      — 学其他 Agent（默认）：抓 URL + LLM 提炼
+            "introspection" — 内省话题：跳过 URL，让 LLM 设计冷小北自己的源码改造方案
+        gap: 仅 introspection 时使用，描述这次反思发现的能力缺口
+        """
+        if kind == "introspection":
+            prompt = self._build_introspection_prompt(topic, gap)
+            evidence = f"[introspection] gap={gap}"
+        else:
+            evidence = self._fetch_url(url) if url else ""
+            prompt = self._build_prompt(topic, evidence)
         response = chat(
             prompt,
             system="你是冷小北的Agent学习模块。只返回JSON，不要解释。",
@@ -116,6 +127,45 @@ class AgentLearner:
         data = extract_json(response)
         lesson = self._lesson_from_data(topic, data, evidence)
         return self.store.add(lesson)
+
+    def _build_introspection_prompt(self, topic: str, gap: str) -> str:
+        """内省话题：不抓 web，直接让 LLM 设计冷小北自己的源码改造方案。"""
+        return f"""你是冷小北的自我改造规划器。冷小北刚刚识别出自身一个能力缺口。
+
+学习方向: {topic}
+具体缺口: {gap or '（未提供详细描述）'}
+
+冷小北的现有架构:
+- 入口: lx_web.py / daemon.py
+- 核心: src/core.py（不可直接改）
+- 自进化: src/self_evolution.py
+- 学习: src/agent_learning.py + src/active_learner.py
+- 协作: src/buddy.py + src/dev_team.py
+- 审查: src/critic.py
+- 变更记录: src/code_change_log.py
+- 测试: src/testing.py
+- 能力注册: src/learned_capabilities.py（兜底）
+- 4 大门面: facade_memory / facade_reasoning / facade_evolution / facade_guardian
+
+请基于这个缺口，设计一个**冷小北自己**就能实施的小改造。
+不要去学外部 Agent，这次是为了补冷小北自己的不足。
+
+返回 JSON:
+{{
+  "source": "self_reflection",
+  "capability": "新能力的名字（一个动词短语）",
+  "pattern": "改造的具体做法（哪个文件加什么函数）",
+  "why_good": "为什么补这个缺口对冷小北有价值",
+  "adaptation": "最小化的实现步骤（≤3 步）",
+  "suggested_files": ["src/某个白名单内的文件.py"],
+  "evidence": "缺口的具体表现"
+}}
+
+要求:
+- suggested_files 必须是冷小北 SAFE_TARGETS 内的真实文件（src/buddy.py / src/active_learner.py / src/dev_team.py / src/critic.py / src/code_change_log.py / src/testing.py / src/learned_capabilities.py）
+- pattern 必须具体到"加一个 XX 函数做 YY"
+- 不修改 SOUL/CONSTITUTION/核心/密钥
+- 只返回 JSON"""
 
     def _build_prompt(self, topic: str, evidence: str) -> str:
         evidence_block = f"\n参考资料摘录:\n{evidence[:6000]}\n" if evidence else ""

@@ -119,6 +119,33 @@ def reload_keys():
 # 模型配置
 # ============================================================================
 MODELS = {
+    "mimo/MiMo-V2.5-Pro": {
+        "provider": "mimo",
+        "base_url": "https://token-plan-cn.xiaomimimo.com/v1",
+        "api_model": "mimo-v2.5-pro",
+        "context_window": 262144,
+        "max_output": 32768,
+        "strengths": ["coding", "reasoning", "planning", "code_generation"],
+        "cost_tier": 2,
+    },
+    "mimo/MiMo-V2.5": {
+        "provider": "mimo",
+        "base_url": "https://token-plan-cn.xiaomimimo.com/v1",
+        "api_model": "mimo-v2.5",
+        "context_window": 262144,
+        "max_output": 32768,
+        "strengths": ["general", "coding", "reasoning"],
+        "cost_tier": 2,
+    },
+    "mimo/MiMo-V2-Pro": {
+        "provider": "mimo",
+        "base_url": "https://token-plan-cn.xiaomimimo.com/v1",
+        "api_model": "mimo-v2-pro",
+        "context_window": 262144,
+        "max_output": 32768,
+        "strengths": ["coding", "reasoning"],
+        "cost_tier": 2,
+    },
     "minimax/MiniMax-M2.7": {
         "provider": "minimax",
         "base_url": "https://api.minimax.chat/v1",
@@ -241,7 +268,7 @@ MODELS = {
     },
 }
 
-DEFAULT_MODEL = "minimax/MiniMax-M2.7"
+DEFAULT_MODEL = "mimo/MiMo-V2.5-Pro"
 
 # ============================================================================
 # 超时配置 - 分级超时根据任务类型
@@ -444,10 +471,14 @@ def route(query: str, context_length: int = 0) -> str:
 
     # Go代码生成 → qwen3-coder-go
     if "coding" in cats and any(k in q for k in ["go", "golang", "go语言"]):
+        if _has_key("mimo"):
+            return "mimo/MiMo-V2.5-Pro"
         if _has_key("bailian"):
             return "bailian/qwen3-coder-go"
     # 代码 → qwen3-coder-plus
     elif "coding" in cats:
+        if _has_key("mimo"):
+            return "mimo/MiMo-V2.5-Pro"
         if _has_key("bailian"):
             return "bailian/qwen3-coder-plus"
         if _has_key("volcengine"):
@@ -460,6 +491,8 @@ def route(query: str, context_length: int = 0) -> str:
 
     # 强推理/规划
     if "reasoning" in cats or "planning" in cats:
+        if _has_key("mimo"):
+            return "mimo/MiMo-V2.5-Pro"
         if _has_key("bailian"):
             return "bailian/qwen3.5-plus"
         if _has_key("volcengine"):
@@ -467,6 +500,8 @@ def route(query: str, context_length: int = 0) -> str:
 
     # 分析
     if "analysis" in cats:
+        if _has_key("mimo"):
+            return "mimo/MiMo-V2.5-Pro"
         if _has_key("bailian"):
             return "bailian/glm-5"
         if _has_key("volcengine"):
@@ -480,6 +515,8 @@ def route(query: str, context_length: int = 0) -> str:
             return "volcengine/doubao-seed-2.0-pro"
 
     # 默认 → 优先使用bailian模型
+    if _has_key("mimo"):
+        return "mimo/MiMo-V2.5-Pro"
     if _has_key("bailian"):
         return "bailian/qwen3.5-plus"
     if _has_key("volcengine"):
@@ -510,18 +547,18 @@ def get_candidate_models(prompt: str) -> Tuple[List[str], List[str]]:
         # 检查是否是Go相关任务
         q_lower = prompt.lower()
         if any(k in q_lower for k in ["go", "golang", "go语言"]):
-            candidate_models.extend(["bailian/qwen3-coder-go", "anthropic/claude-3-opus-20240229", "anthropic/claude-3-sonnet-20240229", "bailian/qwen3-coder-plus", "volcengine/ark-code-latest"])
+            candidate_models.extend(["mimo/MiMo-V2.5-Pro", "bailian/qwen3-coder-go", "anthropic/claude-3-opus-20240229", "anthropic/claude-3-sonnet-20240229", "bailian/qwen3-coder-plus", "volcengine/ark-code-latest"])
         else:
-            candidate_models.extend(["anthropic/claude-3-opus-20240229", "anthropic/claude-3-sonnet-20240229", "bailian/qwen3-coder-plus", "volcengine/ark-code-latest", "bailian/qwen3.5-plus"])
+            candidate_models.extend(["mimo/MiMo-V2.5-Pro", "anthropic/claude-3-opus-20240229", "anthropic/claude-3-sonnet-20240229", "bailian/qwen3-coder-plus", "volcengine/ark-code-latest", "bailian/qwen3.5-plus"])
     elif "reasoning" in cats or "planning" in cats:
-        candidate_models.extend(["anthropic/claude-3-opus-20240229", "bailian/qwen3.5-plus", "anthropic/claude-3-sonnet-20240229", "volcengine/deepseek-v3.2"])
+        candidate_models.extend(["mimo/MiMo-V2.5-Pro", "anthropic/claude-3-opus-20240229", "bailian/qwen3.5-plus", "anthropic/claude-3-sonnet-20240229", "volcengine/deepseek-v3.2"])
     elif "analysis" in cats:
-        candidate_models.extend(["anthropic/claude-3-opus-20240229", "bailian/glm-5", "anthropic/claude-3-sonnet-20240229", "bailian/qwen3.5-plus"])
+        candidate_models.extend(["mimo/MiMo-V2.5-Pro", "anthropic/claude-3-opus-20240229", "bailian/glm-5", "anthropic/claude-3-sonnet-20240229", "bailian/qwen3.5-plus"])
     elif "long_context" in cats:
         candidate_models.extend(["bailian/kimi-k2.5", "volcengine/doubao-seed-2.0-pro", "anthropic/claude-3-opus-20240229"])
     
     # 添加默认模型作为最后选择
-    candidate_models.extend(["anthropic/claude-3-haiku-20240307", "bailian/qwen3.5-plus", "volcengine/deepseek-v3.2", "minimax/MiniMax-M2.7", "minimax/MiniMax-M2.7-highspeed", "minimax/MiniMax-M2.5", "minimax/MiniMax-M2.5-highspeed"])
+    candidate_models.extend(["mimo/MiMo-V2.5-Pro", "mimo/MiMo-V2.5", "mimo/MiMo-V2-Pro", "anthropic/claude-3-haiku-20240307", "bailian/qwen3.5-plus", "volcengine/deepseek-v3.2", "minimax/MiniMax-M2.7", "minimax/MiniMax-M2.7-highspeed", "minimax/MiniMax-M2.5", "minimax/MiniMax-M2.5-highspeed"])
     
     # 去重并确保初始模型在最前面
     unique_models = []
@@ -677,7 +714,7 @@ def chat(
             del headers["Authorization"]
             url = f"{cfg['base_url']}/messages"
             payload = {
-                "model": model.split("/")[-1],
+                "model": cfg.get("api_model", model.split("/")[-1]),
                 "messages": [{"role": m["role"], "content": m["content"]} for m in messages if m["role"] != "system"],
                 "temperature": temperature,
             }
@@ -691,7 +728,7 @@ def chat(
                 payload["max_tokens"] = 4096
         else:
             payload = {
-                "model": model.split("/")[-1],
+                "model": cfg.get("api_model", model.split("/")[-1]),
                 "messages": messages,
                 "temperature": temperature,
             }

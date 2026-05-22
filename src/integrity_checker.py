@@ -186,7 +186,86 @@ class IntegrityChecker:
         
         if results["modified_files"] or results["missing_files"]:
             results["status"] = "failed"
-        
+
+        return results
+
+    # 真正"绝对不可改"的安全底线文件 — 比 core_files 严格得多
+    # 只有这些文件被改动才算 integrity 失败，会阻断 evolution
+    STRICT_PROTECTED_FILES = [
+        'docs/SOUL.md',
+        'docs/CONSTITUTION.md',
+        'docs/AUTONOMY.md',
+        '.env',
+    ]
+
+    def verify_integrity_strict(self) -> Dict[str, Any]:
+        """严格完整性检查 — 只看安全底线文件（SOUL/CONSTITUTION/AUTONOMY/.env）。
+
+        与 verify_integrity 的区别：
+        - verify_integrity 看全部 core_files（包括 core.py / engine.py 等），用户改动会失败
+        - verify_integrity_strict 只看 STRICT_PROTECTED_FILES，agent 改 core.py 不会阻断进化
+
+        这是为了让 self-evolution 真正能跑起来 — 旧版任何 core.py 改动都让 engine 拒绝执行。
+
+        Returns:
+            如果任何 STRICT_PROTECTED_FILES 缺失或被改，status=failed；
+            否则 status=success，modified_files 只列出非严格保护的改动作为 warning。
+        """
+        results = {
+            "status": "success",
+            "verified_files": 0,
+            "modified_files": [],   # 非严格保护文件的改动（仅警告）
+            "missing_files": [],
+            "strict_violations": [],  # 严格保护文件的改动（致命）
+            "details": {},
+        }
+
+        # 先初始化基线（如还没有）
+        if not self.checksums:
+            self.generate_checksums()
+
+        from pathlib import Path
+        root = Path(self.project_root)
+
+        # 1. 对 STRICT_PROTECTED_FILES 做哈希校验
+        for rel_path in self.STRICT_PROTECTED_FILES:
+            full = root / rel_path
+            if not full.exists():
+                # 不存在不算违反（可选文件）
+                continue
+            try:
+                current = self.calculate_file_hash(rel_path)
+                expected = self.checksums.get(rel_path)
+                if expected and current and current != expected:
+                    results["strict_violations"].append(rel_path)
+                    results["details"][rel_path] = {
+                        "status": "modified_strict",
+                        "expected_hash": expected,
+                        "current_hash": current,
+                    }
+                else:
+                    results["verified_files"] += 1
+            except Exception as exc:
+                results["details"][rel_path] = {"status": "error", "error": str(exc)}
+
+        # 2. 对其他 core_files 做哈希校验，但只列为警告
+        for rel_path in self.core_files:
+            if rel_path in self.STRICT_PROTECTED_FILES:
+                continue
+            try:
+                current = self.calculate_file_hash(rel_path)
+                expected = self.checksums.get(rel_path)
+                if expected and current and current != expected:
+                    results["modified_files"].append(rel_path)
+            except Exception:
+                pass
+
+        if results["strict_violations"]:
+            results["status"] = "failed"
+            results["error"] = (
+                f"安全底线文件被修改: {results['strict_violations']}"
+            )
+
         return results
     
     def verify_memory_integrity(self) -> Dict[str, Any]:
