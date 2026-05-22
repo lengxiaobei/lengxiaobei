@@ -12,11 +12,6 @@
   },
   "log_level": "INFO",
   "editor_mode": "normal",
-  "control_layer": {
-    "api_url": "http://localhost:8082/api/v1",
-    "port": 8082,
-    "timeout": 30
-  },
   "memory_layer": {
     "api_url": "http://localhost:8081/api",
     "timeout": 30

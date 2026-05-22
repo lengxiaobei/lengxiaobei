@@ -36,7 +36,7 @@ CONFIRM_FILES = {
 # 兜底安全目标 — 当无法选定时落到这里。保留原值以维持向后兼容。
 SAFE_LESSON_TARGET = "src/learned_capabilities.py"
 
-# 自进化扩展白名单 — agent 可以主动改这些文件中的任意一个，
+# 自进化扩展白名单 — agent 可以主动改这些真实存在的低耦合文件，
 # 而不是只能写元数据到 learned_capabilities.py。
 # 选择标准：
 #   1. 不在 BLOCKED_FILES / CONFIRM_FILES 中
@@ -44,9 +44,8 @@ SAFE_LESSON_TARGET = "src/learned_capabilities.py"
 #   3. 已有自身职责的"次核心"模块，agent 改它能产生真实价值
 SAFE_TARGETS = (
     "src/learned_capabilities.py",  # 能力注册表（兜底）
-    "src/buddy.py",                 # 协作伙伴 — AutoGen/角色类
     "src/active_learner.py",        # 主动学习 — Copilot/Continue 类
-    "src/dev_team.py",              # 开发团队多 Agent — AutoGen 类
+    "src/goal_system.py",           # 目标系统 — 任务分解/优先级类
     "src/critic.py",                # 代码审查 — Aider 类
     "src/code_change_log.py",       # 变更日志 — Git 感知类
     "src/testing.py",               # 测试钩子 — OpenHands 类
@@ -155,18 +154,18 @@ class SelfEvolutionCore:
                 expected_functions=expected_functions,
             )
             if verify["success"]:
-                # 质量门：区分 真完成 / 降级完成（fallback 占位） / 仅元数据
-                quality = self._assess_change_quality(target_file, before)
+                # 质量门：区分语法、函数存在、可调用、语义质量、集成生效
+                quality = self._assess_change_quality(target_file, before, verify)
                 result["quality"] = quality
                 sub = quality.get("substantive")
                 if sub is True:
                     lesson.status = "verified"
                 elif sub == "degraded":
-                    # 改了函数但全是 fallback 占位 — 算"半真"
+                    # 改了函数但全是 fallback 占位 — 只能说明可调用，不说明语义/集成真的生效
                     lesson.status = "verified_degraded"
                     result["status"] = "verified_degraded"
                     result["message"] = (
-                        f"{result.get('message', '')} ⚠ 降级完成：占位 fallback，未真实现 goal。"
+                        f"{result.get('message', '')} ⚠ 降级完成：函数可调用，但语义有效性/集成生效未证明。"
                     ).strip()
                 else:
                     # 没改函数，只追加 dict / 元数据
@@ -223,8 +222,9 @@ class SelfEvolutionCore:
 
         # 关键词 → 文件 映射（按优先级）
         rules = [
-            (("autogen", "多agent", "多 agent", "角色分", "role", "协作", "交接", "handoff", "team"),
-             "src/dev_team.py"),
+            (("autogen", "多agent", "多 agent", "角色分", "role", "协作", "交接", "handoff", "team",
+              "subagent", "fork", "目标", "goal", "priority", "优先级"),
+             "src/goal_system.py"),
             (("copilot", "continue", "上下文感知", "context-aware", "active learn", "主动学习",
               "ide ", "建议生成", "代码建议"),
              "src/active_learner.py"),
@@ -237,7 +237,7 @@ class SelfEvolutionCore:
               "test", "测试", "校验", "verify"),
              "src/testing.py"),
             (("partner", "buddy", "搭档", "陪伴", "对话伙伴"),
-             "src/buddy.py"),
+             "src/active_learner.py"),
         ]
 
         for keywords, target in rules:
@@ -349,7 +349,7 @@ class SelfEvolutionCore:
     ) -> Dict[str, Any]:
         """主 LLM 代码生成失败时，在 safe target 中写入真实 callable 函数。
 
-        这个 fallback 不假装已经实现完整智能；它保证先突破 0% 真完成：
+        这个 fallback 不假装已经实现完整智能；它只保证先写入语法通过、模块级可调用的函数：
         - 只写 SAFE_TARGETS 中的非 metadata 模块
         - 只追加缺失的 expected function
         - 写入后必须 compile 成功，否则回滚
@@ -620,11 +620,21 @@ class SelfEvolutionCore:
             "callable_errors": callable_errors,
         }
 
-    def _assess_change_quality(self, target_file: str, before: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
-        """检查改动是否"实质性"——区分三种情况：
-        - True       : 真改了函数（LLM 生成的智能代码）
-        - 'degraded' : 改了函数但全是 fallback 占位（启发式 if-else，没真智能）
-        - False      : 没改函数（只追加 dict / 元数据）
+    def _assess_change_quality(
+        self,
+        target_file: str,
+        before: Dict[str, Dict[str, Any]],
+        verification: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """检查改动质量，拆成多级信号而不是只给一个“完成”。
+
+        字段含义：
+        - syntax_ok: compile/test 阶段已经通过
+        - function_exists: 目标函数/类确实出现在 AST 中
+        - callable_ok: import 后可 getattr 且 callable
+        - semantic_ok: 非确定性 fallback；仍不等价于业务语义已完全验证
+        - integrated_ok: 本次仅能确认目标模块可导入，尚未证明业务链路调用到该能力
+        - substantive: 向后兼容三态 True / "degraded" / False
         """
         import ast
         import hashlib
@@ -637,14 +647,35 @@ class SelfEvolutionCore:
 
         before_item = before.get(target_file) or {}
         after_path = self.project_root / target_file
+        verification = verification or {}
+        capability_check = verification.get("capability_check") or {}
+        syntax_ok = bool(verification.get("success"))
+        function_exists = bool(capability_check.get("found")) and not bool(capability_check.get("missing"))
+        callable_ok = bool(capability_check.get("all_callable"))
 
         if not after_path.is_file():
-            return {"substantive": False, "reason": "after file missing"}
+            return {
+                "substantive": False,
+                "syntax_ok": syntax_ok,
+                "function_exists": False,
+                "callable_ok": False,
+                "semantic_ok": False,
+                "integrated_ok": False,
+                "reason": "after file missing",
+            }
 
         try:
             after_src = after_path.read_text(encoding="utf-8")
         except Exception as exc:
-            return {"substantive": False, "reason": f"cannot read after: {exc}"}
+            return {
+                "substantive": False,
+                "syntax_ok": syntax_ok,
+                "function_exists": function_exists,
+                "callable_ok": callable_ok,
+                "semantic_ok": False,
+                "integrated_ok": False,
+                "reason": f"cannot read after: {exc}",
+            }
 
         def _func_class_info(src: str) -> Dict[str, Dict[str, Any]]:
             """返回 {name: {sig_hash, is_fallback, body_size}}"""
@@ -673,13 +704,27 @@ class SelfEvolutionCore:
             # 新文件
             after_info = _func_class_info(after_src)
             if not after_info:
-                return {"substantive": False, "reason": "new file but no defs"}
+                return {
+                    "substantive": False,
+                    "syntax_ok": syntax_ok,
+                    "function_exists": function_exists,
+                    "callable_ok": callable_ok,
+                    "semantic_ok": False,
+                    "integrated_ok": False,
+                    "reason": "new file but no defs",
+                }
             fb_count = sum(1 for v in after_info.values() if v["is_fallback"])
             sub = "degraded" if fb_count == len(after_info) else True
+            semantic_ok = sub is True
             return {
                 "substantive": sub,
+                "syntax_ok": syntax_ok,
+                "function_exists": function_exists or bool(after_info),
+                "callable_ok": callable_ok,
+                "semantic_ok": semantic_ok,
+                "integrated_ok": False,
                 "reason": (f"new file; {fb_count}/{len(after_info)} are fallback occupants"
-                           if fb_count else "new file with real definitions"),
+                           if fb_count else "new file with non-fallback definitions"),
                 "added_or_changed": list(after_info.keys()),
                 "before_def_count": 0,
                 "after_def_count": len(after_info),
@@ -721,7 +766,16 @@ class SelfEvolutionCore:
 
         return {
             "substantive": substantive,
+            "syntax_ok": syntax_ok,
+            "function_exists": function_exists or bool(new_or_changed),
+            "callable_ok": callable_ok,
+            "semantic_ok": substantive is True,
+            "integrated_ok": False,
             "reason": reason,
+            "quality_note": (
+                "integrated_ok=false means the change has not been proven through an end-to-end "
+                "business flow; callable_ok only proves a module-level symbol can be called."
+            ),
             "added": added,
             "changed_funcs": changed,
             "removed": removed,

@@ -10,6 +10,7 @@ lx doctor — 冷小北系统诊断工具
 
 import json
 import os
+import subprocess
 import sqlite3
 import sys
 import time
@@ -64,6 +65,7 @@ class Doctor:
         self._check_python()
         self._check_dependencies()
         self._check_config()
+        self._check_project_layout()
         self._check_api_keys()
         self._check_memory_db()
         self._check_permissions()
@@ -137,12 +139,43 @@ class Doctor:
                 self.check(f"config/{env_file}", False,
                            "文件不存在", severity="warn")
 
+    # ---- 项目目录结构 ----
+
+    def _check_project_layout(self):
+        script = self.root / "scripts" / "check_project_layout.py"
+        if not script.is_file():
+            self.check("项目目录规范", False,
+                       "scripts/check_project_layout.py 不存在", severity="warn")
+            return
+
+        try:
+            proc = subprocess.run(
+                [sys.executable, str(script), "--root", str(self.root)],
+                cwd=str(self.root),
+                text=True,
+                capture_output=True,
+                timeout=20,
+            )
+        except Exception as exc:
+            self.check("项目目录规范", False, f"检查失败: {exc}", severity="warn")
+            return
+
+        output = (proc.stdout + proc.stderr).strip()
+        details = output.splitlines()[:12] if output else []
+        self.check(
+            "项目目录规范",
+            proc.returncode == 0,
+            "通过" if proc.returncode == 0 else "存在不合规目录/构建产物",
+            details,
+            "error" if proc.returncode != 0 else "ok",
+        )
+
     # ---- API Keys ----
 
     def _check_api_keys(self):
         try:
-            from .llm import _OPENCLAW_KEYS, MODELS
-            providers_found = list(_OPENCLAW_KEYS.keys())
+            from .llm import _PROVIDER_KEYS, MODELS
+            providers_found = [name for name, key in _PROVIDER_KEYS.items() if key]
             providers_config = set(cfg["provider"] for cfg in MODELS.values())
             missing = providers_config - set(providers_found)
 

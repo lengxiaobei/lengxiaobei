@@ -41,7 +41,14 @@ Homepage = "https://github.com/lengxiaobei/lengxiaobei"
 Repository = "https://github.com/lengxiaobei/lengxiaobei.git"
 
 [tool.setuptools]
-packages = ["src", "src.evolution", "src.kairos", "src.mcp"]
+packages = [
+    "src",
+    "src.evolution",
+    "src.kairos",
+    "lx_web",
+    "lx_web.blueprints",
+    "lx_web.shared",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

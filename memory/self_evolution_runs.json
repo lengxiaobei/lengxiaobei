@@ -1111,5 +1111,153 @@
       }
     },
     "created_at": 1779447207.510339
+  },
+  {
+    "id": "run_1779454507",
+    "topic": "自主学习 Continue 的 IDE 上下文、代码库索引和开发者交互设计能力，并提炼一个可落地改进",
+    "lesson_id": "lesson_1779442634",
+    "target_file": "src/active_learner.py",
+    "goal": "在 src/active_learner.py 中新增函数 capture_code_change_event，用于捕获IDE中的代码变更事件并触发上下文建议更新",
+    "status": "failed",
+    "result": {
+      "status": "failed",
+      "error": "进化引擎未配置",
+      "expected_functions": [
+        {
+          "name": "capture_code_change_event",
+          "signature": "capture_code_change_event(event: dict) -> None",
+          "kind": "function"
+        }
+      ]
+    },
+    "created_at": 1779454507.596082
+  },
+  {
+    "id": "run_1779455111",
+    "topic": "开发一个知识检索模块，集成外部API或本地知识库，以增强冷小北在自主学习中的信息访问和整合能力",
+    "lesson_id": "lesson_1779454604",
+    "target_file": "src/active_learner.py",
+    "goal": "在 src/active_learner.py 中新增函数 retrieve_external_knowledge，用于通过查询字符串检索外部知识并返回整合后的信息字符串",
+    "status": "verified_degraded",
+    "result": {
+      "status": "verified_degraded",
+      "changed": true,
+      "file_path": "/Users/panhao/projects/lengxiaobei/src/active_learner.py",
+      "goal": "在 src/active_learner.py 中新增函数 retrieve_external_knowledge，用于通过查询字符串检索外部知识并返回整合后的信息字符串",
+      "added_functions": [
+        "retrieve_external_knowledge"
+      ],
+      "message": "主进化生成代码失败，已用确定性 fallback 在目标模块写入真实可调用函数。 ⚠ 降级完成：占位 fallback，未真实现 goal。",
+      "primary_target": "src/active_learner.py",
+      "primary_result": {
+        "status": "failed",
+        "error": "代码验证失败"
+      },
+      "fallback_target": "src/active_learner.py",
+      "fallback_kind": "deterministic_expected_function",
+      "expected_functions": [
+        {
+          "name": "retrieve_external_knowledge",
+          "signature": "retrieve_external_knowledge(query: str) -> str",
+          "kind": "function"
+        }
+      ],
+      "quality": {
+        "substantive": "degraded",
+        "reason": "only fallback occupants added: ['retrieve_external_knowledge']. LLM 主路径失败 → 系统写了死板的 if-else 占位，并非真智能代码。",
+        "added": [
+          "retrieve_external_knowledge"
+        ],
+        "changed_funcs": [],
+        "removed": [],
+        "real_funcs": [],
+        "fallback_funcs": [
+          "retrieve_external_knowledge"
+        ],
+        "before_def_count": 19,
+        "after_def_count": 20
+      },
+      "verification": {
+        "success": true,
+        "outputs": [
+          {
+            "command": "python3 -m compileall -q src",
+            "returncode": 0,
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "command": "pytest tests/test_core_modules.py -q",
+            "returncode": 0,
+            "stdout": "cts/lengxiaobei\nconfigfile: pytest.ini\nplugins: anyio-4.12.1, cov-7.1.0\ncollected 38 items\n\ntests/test_core_modules.py ......................................        [100%]\n\n=============================== warnings summary ===============================\ntests/test_core_modules.py::TestMemoryBackends::test_build_backend_chain_returns_list\n  <frozen importlib._bootstrap>:228: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute\n\ntests/test_core_modules.py::TestMemoryBackends::test_build_backend_chain_returns_list\n  <frozen importlib._bootstrap>:228: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute\n\ntests/test_core_modules.py::TestMemoryBackends::test_build_backend_chain_returns_list\n  <frozen importlib._bootstrap>:228: DeprecationWarning: builtin type swigvarlink has no __module__ attribute\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n================== 38 passed, 3 warnings in 60.60s (0:01:00) ===================\n",
+            "stderr": ""
+          }
+        ],
+        "capability_check": {
+          "all_callable": true,
+          "expected": [
+            "retrieve_external_knowledge"
+          ],
+          "found": [
+            "retrieve_external_knowledge"
+          ],
+          "missing": [],
+          "callable_errors": []
+        }
+      }
+    },
+    "created_at": 1779455111.18483
+  },
+  {
+    "id": "run_1779463927",
+    "topic": "参考优秀 Agent 控制台设计，改进冷小北 Web 界面的可用性、状态反馈和按钮交互",
+    "lesson_id": "lesson_1779463833",
+    "target_file": "src/learned_capabilities.py",
+    "goal": "在 src/learned_capabilities.py 中新增函数 toggle_loading_indicator，用于在响应生成时切换加载动画的显示状态",
+    "status": "failed",
+    "result": {
+      "status": "failed",
+      "file_path": "/Users/panhao/projects/lengxiaobei/src/learned_capabilities.py",
+      "goal": "在 src/learned_capabilities.py 中新增函数 toggle_loading_indicator，用于在响应生成时切换加载动画的显示状态",
+      "changed": true,
+      "message": "Lesson 已沉淀为源码级 learned capability。",
+      "expected_functions": [
+        {
+          "name": "toggle_loading_indicator",
+          "signature": "toggle_loading_indicator(show: bool) -> None",
+          "kind": "function"
+        }
+      ],
+      "verification": {
+        "success": false,
+        "outputs": [
+          {
+            "command": "python3 -m compileall -q src",
+            "returncode": 0,
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "command": "pytest tests/test_core_modules.py -q",
+            "returncode": 0,
+            "stdout": "cts/lengxiaobei\nconfigfile: pytest.ini\nplugins: anyio-4.12.1, cov-7.1.0\ncollected 38 items\n\ntests/test_core_modules.py ......................................        [100%]\n\n=============================== warnings summary ===============================\ntests/test_core_modules.py::TestMemoryBackends::test_build_backend_chain_returns_list\n  <frozen importlib._bootstrap>:228: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute\n\ntests/test_core_modules.py::TestMemoryBackends::test_build_backend_chain_returns_list\n  <frozen importlib._bootstrap>:228: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute\n\ntests/test_core_modules.py::TestMemoryBackends::test_build_backend_chain_returns_list\n  <frozen importlib._bootstrap>:228: DeprecationWarning: builtin type swigvarlink has no __module__ attribute\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n================== 38 passed, 3 warnings in 67.56s (0:01:07) ===================\n",
+            "stderr": ""
+          }
+        ],
+        "capability_check": {
+          "all_callable": false,
+          "expected": [
+            "toggle_loading_indicator"
+          ],
+          "found": [],
+          "missing": [
+            "toggle_loading_indicator"
+          ],
+          "callable_errors": []
+        },
+        "reason": "expected_functions 中有函数未真的被加进去或不可调用 — missing=['toggle_loading_indicator'], errors=[]"
+      }
+    },
+    "created_at": 1779463927.576336
   }
 ]

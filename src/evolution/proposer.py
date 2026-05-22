@@ -1,6 +1,7 @@
 """Proposer — 方案提出
 
-基于 Curator 发现的改进点，让 LLM 生成具体的修改方案。
+让 LLM 分析代码并生成完整的修改后文件。
+优化: 给 LLM 完整的文件内容 + 更好的提示词。
 """
 
 import logging
@@ -8,7 +9,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any
 
 from .llm_client import chat_json, generate_code
-from .models import AIDecision, EvolutionContext
+from .. import llm
 
 logger = logging.getLogger(__name__)
 
@@ -16,9 +17,9 @@ logger = logging.getLogger(__name__)
 @dataclass
 class Proposal:
     """修改方案"""
-    improvement_type: str
-    file_path: str
-    original_issue: str
+    improvement_type: str = "code_quality"
+    file_path: str = ""
+    original_issue: str = ""
     strategy: str = ""
     approach: str = ""
     steps: List[str] = field(default_factory=list)
@@ -31,7 +32,7 @@ class Proposal:
         return cls(
             improvement_type=data.get("improvement_type", "code_quality"),
             file_path=data.get("file_path", ""),
-            original_issue=data.get("original_issue", ""),
+            original_issue=data.get("original_issue", data.get("issue", "")),
             strategy=data.get("strategy", ""),
             approach=data.get("approach", ""),
             steps=data.get("steps", []),
@@ -42,167 +43,141 @@ class Proposal:
 
 
 class Proposer:
-    """方案提出器 — LLM 生成具体修改方案"""
+    """方案提出器 — LLM 分析代码并生成完整修改后文件"""
 
     def __init__(self, project_root: str):
         self.project_root = project_root
 
-    def propose(self, improvement: Dict[str, Any], original_code: str) -> Proposal:
-        """根据改进点提出具体方案"""
-        logger.info(f"[Proposer] 分析改进点: {improvement.get('issue', improvement.get('type', ''))}")
-
+    def propose(self, improvement: Dict[str, Any], original_code: str) -> Optional[Proposal]:
+        """根据改进点分析代码并提出具体方案"""
         issue = improvement.get("issue", "")
-        if "文件末尾缺少换行" in issue:
+        file_path = improvement.get("file", "")
+        issue_type = improvement.get("type", "code_quality")
+
+        logger.info(f"[Proposer] analyzing: {issue[:80]}")
+
+        # 简单修复直接返回，不走 LLM
+        if "newline" in issue.lower() and "eof" in issue.lower() or "missing final newline" in issue.lower():
             return Proposal(
-                improvement_type=improvement.get("type", "code_quality"),
-                file_path=improvement.get("file", ""),
+                improvement_type=issue_type,
+                file_path=file_path,
                 original_issue=issue,
-                strategy="补齐文件末尾换行",
-                approach="追加一个换行符，不改变代码逻辑",
-                steps=["检查文件结尾", "追加换行符", "运行验证"],
-                success_criteria="文件以换行符结尾，测试通过",
+                strategy="add missing final newline",
+                approach="append newline character, no logic changes",
+                steps=["check file ending", "append newline", "verify"],
+                success_criteria="file ends with newline, tests pass",
                 confidence=0.95,
                 risk_level="low",
             )
 
-        plan = self._generate_plan(improvement, original_code)
-        risk = self._assess_risk(plan, original_code)
+        # LLM 生成方案
+        plan = self._generate_plan(issue, issue_type, original_code)
+        if not plan:
+            return None
 
-        plan.risk_level = risk
         return plan
 
     def generate_new_code(self, original_code: str, proposal: Proposal) -> str:
-        """生成修改后的代码 — 优先基于步骤生成 patch 级改动"""
-        if self._is_final_newline_fix(proposal):
+        """生成修改后的完整代码文件"""
+        if self._is_newline_only(proposal):
             return original_code if original_code.endswith("\n") else original_code + "\n"
-        if len(original_code) > 300:
-            return self._generate_patch(original_code, proposal)
-        return self._generate_full(original_code, proposal)
+
+        # 重要：给 LLM 完整的原文件内容，要求生成完整输出
+        return self._generate_full_code(original_code, proposal)
 
     @staticmethod
-    def _is_final_newline_fix(proposal: Proposal) -> bool:
-        text = " ".join([
+    def _is_newline_only(proposal: Proposal) -> bool:
+        texts = [
             proposal.original_issue or "",
             proposal.strategy or "",
             proposal.approach or "",
             " ".join(proposal.steps or []),
-        ])
-        return "文件末尾缺少换行" in text or "final newline" in text.lower()
+        ]
+        combined = " ".join(texts).lower()
+        return "newline" in combined and ("eof" in combined or "final" in combined)
 
-    def _generate_patch(self, original_code: str, proposal: Proposal) -> str:
-        """生成 diff/patch — 只输出需要修改的行和上下文"""
-        prompt = f"""你是代码修改专家。请以最小化改动的方式修改代码。
+    def _generate_plan(self, issue: str, issue_type: str, code: str) -> Optional[Proposal]:
+        """让 LLM 分析代码并生成修改方案"""
+        code_excerpt = code[:8000]  # 大文件的截断版本
 
-目标: {proposal.original_issue}
-策略: {proposal.strategy}
-步骤:
-{chr(10).join(f'- {s}' for s in proposal.steps)}
+        prompt = f"""You are a senior Python engineer. Analyze the following code and create a detailed improvement plan.
 
-原始代码:
+ISSUE: {issue}
+TYPE: {issue_type}
+
+CODE:
 ```python
-{original_code[:10000]}
+{code_excerpt}
 ```
 
-要求:
-1. 只修改必要的行，不改动无关代码
-2. 添加新函数时放在文件末尾合适位置
-3. 遵循 PEP 8 和已有代码风格
-4. 保留所有已有导入
+Return a JSON object with:
+- strategy: high-level strategy description (1 sentence)
+- approach: specific technical approach (1-2 sentences)
+- steps: list of 3-5 concrete implementation steps
+- success_criteria: how to verify the change is correct
+- confidence: 0.0-1.0 estimate of success probability
+- risk_level: one of "low", "medium", "high"
 
-只返回完整的修改后 Python 代码，不要任何解释。"""
-        return generate_code(prompt)
+IMPORTANT:
+- Be conservative. If unsure, set confidence below 0.5.
+- Prefer small, focused changes over large refactors.
+- Consider backward compatibility.
 
-    def _generate_full(self, original_code: str, proposal: Proposal) -> str:
-        """整文件生成 — 仅用于小文件"""
-        prompt = f"""你是代码生成专家。请根据修改方案生成完整的修改后代码。
-
-目标: {proposal.original_issue}
-策略: {proposal.strategy}
-步骤:
-{chr(10).join(f'- {s}' for s in proposal.steps)}
-
-原始代码:
-```python
-{original_code[:8000]}
-```
-
-要求:
-1. 解决识别的问题
-2. 遵循 PEP 8 和最佳实践
-3. 保持代码风格一致
-4. 保留所有现有功能
-
-只返回完整的 Python 代码，不要任何解释。"""
-        return generate_code(prompt)
-
-    def _generate_plan(self, improvement: Dict[str, Any], code: str) -> Proposal:
-        """LLM 生成修改计划"""
-        issue = improvement.get("issue", "")
-        prompt = f"""你是代码改进专家。请分析以下改进点并制定详细方案。
-
-改进点: {issue}
-类型: {improvement.get('type', 'code_quality')}
-
-代码(部分):
-```python
-{code[:5000]}
-```
-
-请返回:
-```json
-{{
-  "strategy": "策略描述",
-  "approach": "具体方法",
-  "steps": ["步骤1", "步骤2", "步骤3"],
-  "success_criteria": "成功标准",
-  "confidence": 0.8
-}}
-```
-
-只返回JSON。"""
+Return ONLY valid JSON, no markdown, no explanation."""
 
         try:
-            data = chat_json(prompt, temperature=0.3, fallback={})
-        except Exception:
-            data = {}
+            data = chat_json(prompt, temperature=0.2, fallback=None)
+            if not data:
+                return None
+            return Proposal(
+                improvement_type=issue_type,
+                file_path="",
+                original_issue=issue,
+                strategy=data.get("strategy", "improve code quality"),
+                approach=data.get("approach", "analyze and implement improvements"),
+                steps=data.get("steps", ["analyze code", "implement changes", "verify"]),
+                success_criteria=data.get("success_criteria", "tests pass"),
+                confidence=data.get("confidence", 0.7),
+                risk_level=data.get("risk_level", "medium"),
+            )
+        except Exception as e:
+            logger.error(f"[Proposer] plan generation failed: {e}")
+            return None
 
-        return Proposal(
-            improvement_type=improvement.get("type", "code_quality"),
-            file_path=improvement.get("file", ""),
-            original_issue=issue,
-            strategy=data.get("strategy", "逐步优化代码"),
-            approach=data.get("approach", "分析问题并实施改进"),
-            steps=data.get("steps", ["分析代码", "实施修改", "验证结果"]),
-            success_criteria=data.get("success_criteria", "代码质量提升，测试通过"),
-            confidence=data.get("confidence", 0.7),
-        )
+    def _generate_full_code(self, original_code: str, proposal: Proposal) -> str:
+        """让 LLM 生成完整修改后的代码文件
 
-    def _assess_risk(self, proposal: Proposal, code: str) -> str:
-        """LLM 评估风险等级"""
-        prompt = f"""评估以下代码修改的风险等级。
+        关键: 要求输出完整文件，不是 diff。
+        LLM 输出后 executor._sanitize() 会清理 markdown 包装。
+        """
+        # 限制输入长度，但尽量给完整上下文
+        code_input = original_code[:12000]
 
-修改策略: {proposal.strategy}
-修改步骤: {', '.join(proposal.steps)}
-代码片段:
+        prompt = f"""You are an expert Python developer. Rewrite the following file to implement the specified improvement.
+
+FILE CONTENT:
 ```python
-{code[:1000]}
+{code_input}
 ```
 
-风险等级:
-- low: 简单重构、注释修改、小功能增强
-- medium: 功能修改、新函数添加、小范围重构
-- high: 核心逻辑修改、架构调整、API变更
-- critical: 系统核心模块修改
+IMPROVEMENT:
+Issue: {proposal.original_issue}
+Strategy: {proposal.strategy}
+Approach: {proposal.approach}
+Steps:
+{chr(10).join(f'- {s}' for s in proposal.steps)}
+Success Criteria: {proposal.success_criteria}
 
-只返回: low/medium/high/critical"""
+RULES:
+1. Output the COMPLETE file, not a diff. Include ALL imports, ALL functions, ALL classes.
+2. Make ONLY the necessary changes. Do not refactor unrelated code.
+3. Follow PEP 8 and the existing code style.
+4. Keep all existing imports. Add new imports only if needed.
+5. Do NOT add markdown code fences (no ```python, no ```).
+6. Do NOT add explanations before or after the code.
+7. The first line of your output must be valid Python (import, class, def, or # comment).
+8. The output must compile with Python 3.8+.
 
-        try:
-            from .. import llm
-            response = llm.chat(prompt, system="你是风险评估专家。", temperature=0.1)
-            response = response.strip().lower()
-            for level in ["critical", "high", "medium", "low"]:
-                if level in response:
-                    return level
-        except Exception:
-            pass
-        return "medium"
+Output ONLY the complete Python source code."""
+
+        return generate_code(prompt)

@@ -136,11 +136,12 @@ class AgentLearner:
 具体缺口: {gap or '（未提供详细描述）'}
 
 冷小北的现有架构:
-- 入口: lx_web.py / daemon.py
-- 核心: src/core.py（不可直接改）
+- Web 入口: lx_web.app:create_app（lx_web.py 只是兼容 wrapper）
+- 运行入口: daemon.py / python -m src.core
+- 核心: src/core.py（不推荐由自进化直接改）
 - 自进化: src/self_evolution.py
 - 学习: src/agent_learning.py + src/active_learner.py
-- 协作: src/buddy.py + src/dev_team.py
+- 子代理/目标: src/goal_system.py
 - 审查: src/critic.py
 - 变更记录: src/code_change_log.py
 - 测试: src/testing.py
@@ -162,7 +163,7 @@ class AgentLearner:
 }}
 
 要求:
-- suggested_files 必须是冷小北 SAFE_TARGETS 内的真实文件（src/buddy.py / src/active_learner.py / src/dev_team.py / src/critic.py / src/code_change_log.py / src/testing.py / src/learned_capabilities.py）
+- suggested_files 必须是冷小北 SAFE_TARGETS 内的真实文件（src/active_learner.py / src/goal_system.py / src/critic.py / src/code_change_log.py / src/testing.py / src/learned_capabilities.py）
 - pattern 必须具体到"加一个 XX 函数做 YY"
 - 不修改 SOUL/CONSTITUTION/核心/密钥
 - 只返回 JSON"""

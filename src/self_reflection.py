@@ -128,7 +128,7 @@ def detect_user_complaint(context_text: str, recent_gaps: List[str] | None = Non
     suggested_topic = (
         f"修复用户反馈的 [{', '.join(all_cats)}] 类问题。"
         f"原始反馈：{user_msg[:200]}。"
-        f"请在合适的 SAFE_TARGETS 模块（src/buddy.py / src/active_learner.py / src/dev_team.py / "
+        f"请在合适的 SAFE_TARGETS 模块（src/active_learner.py / src/goal_system.py / "
         f"src/critic.py / src/code_change_log.py / src/testing.py / src/learned_capabilities.py）中"
         f"新增对应的函数来解决这个问题，函数名要明确反映改进点。"
     )

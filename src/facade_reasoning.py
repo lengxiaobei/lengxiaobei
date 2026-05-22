@@ -1,7 +1,7 @@
 """
 推理系统 Facade — 懒加载查询引擎、工具、技能、模型路由等
 
-含: query_engine, tool_registry, tool_builder, skill_manager, integration_manager
+含: query_engine, tool_registry, skill_manager, integration_manager
 模型路由统一使用 llm.route()
 """
 
@@ -15,7 +15,6 @@ class ReasoningFacade:
         self._memory_facade = memory_facade
         self._query_engine = None
         self._tool_registry = None
-        self._tool_builder = None
         self._skill_manager = None
         self._integration_manager = None
         self._model_router = None
@@ -27,18 +26,6 @@ class ReasoningFacade:
 
             self._tool_registry = ToolRegistry(str(self._project_root))
         return self._tool_registry
-
-    @property
-    def tool_builder(self):
-        if self._tool_builder is None:
-            from .tool_builder import ToolBuilder
-
-            tools_dir = self._project_root / "tools"
-            tools_dir.mkdir(exist_ok=True)
-            self._tool_builder = ToolBuilder(
-                str(tools_dir), registry=self.tool_registry
-            )
-        return self._tool_builder
 
     @property
     def skill_manager(self):

@@ -64,10 +64,6 @@ class ConfigManager:
             },
             "log_level": "INFO",
             "editor_mode": "normal",
-            "control_layer": {
-                "api_url": "http://localhost:8080/api/v1",
-                "timeout": 30
-            },
             "memory_layer": {
                 "api_url": "http://localhost:8081/api/v1",
                 "timeout": 30

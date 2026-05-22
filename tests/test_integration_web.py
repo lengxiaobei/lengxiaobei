@@ -1,9 +1,9 @@
-"""端到端集成测试：启动 lx_web.py，走通 5 模块所有新 API + SSE 推送。
+"""端到端集成测试：启动最终 Web 入口，走通主要 API + SSE 推送。
 
 跑法：
   pytest tests/test_integration_web.py -v -s
 
-这套测试**不 mock**，会真实启动一个 web server 子进程，并对所有新 API 发起 HTTP 请求。
+这套测试不 mock，会真实启动一个 web server 子进程，并对所有新 API 发起 HTTP 请求。
 所有用例必须通过才能视为上线达标。
 """
 
@@ -32,14 +32,14 @@ def _pick_free_port() -> int:
 
 @pytest.fixture(scope="module")
 def web_server():
-    """启动一次 lx_web.py，整组测试结束后关闭。"""
+    """启动一次最终 Web 入口，整组测试结束后关闭。"""
     port = _pick_free_port()
     base = f"http://127.0.0.1:{port}"
 
     env = {**os.environ, "LX_WEB_PORT": str(port), "LX_WEB_HOST": "127.0.0.1",
            "PYTHONUNBUFFERED": "1"}
     proc = subprocess.Popen(
-        [sys.executable, "lx_web.py"],
+        [sys.executable, "-m", "lx_web.app"],
         cwd=str(PROJECT_ROOT),
         env=env,
         stdout=subprocess.PIPE,
@@ -127,6 +127,7 @@ class TestSystemModule:
         assert body.get("status") == "ok"
         assert "pid" in body
         assert "restart" in body
+        assert any("lx_web.app" in part for part in body.get("argv", []))
 
 
 # ============================================================================
@@ -360,5 +361,4 @@ class TestRegression:
     def test_index_html_served(self, web_server):
         r = requests.get(f"{web_server['base']}/", timeout=10)
         assert r.status_code == 200
-        # 应该是 HTML（lx-desktop/renderer/index.html）或 JSON 端点目录
-        assert "html" in r.headers.get("Content-Type", "") or r.headers.get("Content-Type", "").startswith("application/json")
+        assert r.headers.get("Content-Type", "").startswith("application/json")

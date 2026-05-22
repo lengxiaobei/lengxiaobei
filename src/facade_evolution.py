@@ -1,8 +1,7 @@
 """
-进化系统 Facade — 懒加载进化引擎、宪法、熔断器、审查/测试等
+进化系统 Facade — 懒加载进化引擎、熔断器、审查/测试等
 
-含: autonomous_evolution, curator, verifier, constitution, evolution_permission,
-     circuit_breaker, learner, code_critic, code_tester, dev_team
+含: autonomous_evolution, curator, verifier, circuit_breaker, learner, code_critic, code_tester
 """
 
 from pathlib import Path
@@ -25,7 +24,6 @@ class EvolutionFacade:
         self._learner = None
         self._code_critic = None
         self._code_tester = None
-        self._dev_team = None
 
     @property
     def constitution(self):
@@ -50,9 +48,7 @@ class EvolutionFacade:
 
             self._autonomous_evolution = create_autonomous_evolution_engine(
                 project_root=str(self._project_root),
-                permission_manager=self.evolution_permission,
                 circuit_breaker=self.circuit_breaker,
-                constitution=self.constitution,
             )
         return self._autonomous_evolution
 
@@ -107,11 +103,3 @@ class EvolutionFacade:
 
             self._code_tester = CodeTester(str(self._project_root))
         return self._code_tester
-
-    @property
-    def dev_team(self):
-        if self._dev_team is None:
-            from .dev_team import create_dev_team
-
-            self._dev_team = create_dev_team(str(self._project_root))
-        return self._dev_team

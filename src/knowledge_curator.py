@@ -98,8 +98,8 @@ class KnowledgeCurator:
 
     def __init__(self, project_root: str):
         self.project_root = Path(project_root)
-        self.curator_dir = self.project_root / "curator"
-        self.curator_dir.mkdir(exist_ok=True)
+        self.curator_dir = self.project_root / "memory" / "curator"
+        self.curator_dir.mkdir(parents=True, exist_ok=True)
 
         self.patterns_file = self.curator_dir / "patterns.json"
         self.state_file = self.curator_dir / "curator_state.json"
@@ -374,7 +374,7 @@ class KnowledgeCurator:
 
     def _extract_with_llm(self) -> int:
         """让 LLM 从进化历史中提取可复用的知识模式"""
-        evo_path = self.project_root / "evolution_history.json"
+        evo_path = self.project_root / "state" / "evolution_history.json"
         if not evo_path.exists():
             print("   ⏭️  无进化历史文件")
             return 0

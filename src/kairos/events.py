@@ -74,7 +74,7 @@ class EventBus:
         self._lock = threading.RLock()
         self._history: List[EventRecord] = []
         self._max_history = 500
-        self._log_path = Path(project_root) / "kairos_events.jsonl" if project_root else None
+        self._log_path = Path(project_root) / "state" / "kairos_events.jsonl" if project_root else None
         if self._log_path:
             self._log_path.parent.mkdir(parents=True, exist_ok=True)
 

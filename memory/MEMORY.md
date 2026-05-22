@@ -32,14 +32,15 @@ _每次主会话开始时优先读取此文件_
 - `memory/2026-04-05.md` — 第一次完整讨论，系统性记录了潘豪的目标和不满
 - `memory/2026-04-08-constitution.md` — 数字生命「冷小北」核心宪法（草案）
 
-## 系统架构（2026-04-11）
+## 系统架构（2026-05-22）
 
 ### 关键文件
 - `src/core.py` — 核心系统（LengXiaobei Bootstrap）
-- `src/autonomous_evolution.py` — 自主进化引擎（新设计，松耦合）
-- `src/kairos.py` — KAIROS 自主决策系统
-- `src/memory.py` / `src/hybrid_memory.py` — 记忆系统
-- `src/dev_team.py` — 研发团队协作
+- `lx_web/app.py` — Blueprint 化 Web 唯一真实入口（`lx_web.py` 只是兼容 wrapper）
+- `src/self_evolution.py` — 自进化闭环与 SAFE_TARGETS
+- `src/kairos/events.py` — KAIROS 事件总线
+- `src/hybrid_memory.py` — 混合记忆系统
+- `src/goal_system.py` / `src/motivation_system.py` — 目标与动机系统
 
 ### 语言选择结论
 - **底层核心：** TypeScript + Bun（Claude Code / OpenClaw 在用）

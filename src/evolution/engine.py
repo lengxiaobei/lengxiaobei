@@ -36,33 +36,29 @@ logger = logging.getLogger(__name__)
 
 
 class AutonomousEvolutionEngine:
-    """自主进化引擎 — 治理内嵌版本"""
+    """自主进化引擎 — 精简版本"""
 
     def __init__(self, project_root: str = None,
-                 permission_manager=None,
-                 circuit_breaker=None,
-                 constitution=None):
+                 circuit_breaker=None):
         if project_root is None:
             project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.project_root = project_root
 
         self.curator = Curator(project_root)
         self.proposer = Proposer(project_root)
-        self.executor = SafeExecutor(project_root, permission_manager, constitution)
+        self.executor = SafeExecutor(project_root)
         self.verifier = PytestVerifier(project_root)
         self.skills = SkillsStore(project_root)
         self.audit = AuditTrail(project_root)
 
-        self.permission_manager = permission_manager
         self.circuit_breaker = circuit_breaker
-        self.constitution = constitution
 
         self.current_score = 0.0
         self.last_evolution_time: float = 0
         self.evolution_cooldown: float = 600
 
     # ------------------------------------------------------------------
-    # evolve — 四步流程 + 治理内嵌
+    # evolve — 四步流程
     # ------------------------------------------------------------------
 
     def evolve(self, file_path: str, goal_description: str,
@@ -84,16 +80,6 @@ class AutonomousEvolutionEngine:
         if not self._cb_check_health():
             return {"status": "failed", "error": "Circuit breaker tripped"}
 
-        # ---- 完整性 (strict 模式：只阻断 SOUL/CONSTITUTION 等安全底线变动) ----
-        integrity_check = IntegrityChecker(self.project_root).verify_integrity_strict()
-        if integrity_check.get("status") != "success":
-            self._cb_record_failure("Strict integrity violated")
-            return {
-                "status": "failed",
-                "error": integrity_check.get("error", "Strict integrity check failed"),
-                "strict_violations": integrity_check.get("strict_violations", []),
-            }
-
         if not os.path.exists(abs_path):
             return {"status": "failed", "error": f"File not found: {abs_path}"}
 
@@ -111,8 +97,9 @@ class AutonomousEvolutionEngine:
         self.audit.log_phase(audit_entry, "triage", {"risk_level": getattr(proposal, "risk_level", "unknown") if proposal else "N/A"})
 
         if not proposal or proposal.confidence < 0.5:
-            self.audit.finish_and_write(audit_entry, "rejected", "方案置信度过低")
-            return {"status": "failed", "error": "方案置信度过低"}
+            reason = "方案置信度过低" if proposal else "无法生成方案"
+            self.audit.finish_and_write(audit_entry, "rejected", reason)
+            return {"status": "failed", "error": reason}
 
         self.audit.log_phase(audit_entry, "propose", {
             "strategy": proposal.strategy,
@@ -120,25 +107,6 @@ class AutonomousEvolutionEngine:
             "confidence": proposal.confidence,
             "risk_level": proposal.risk_level if hasattr(proposal, "risk_level") else "unknown",
         })
-
-        # ---- Constitution 合规检查 ----
-        if self.constitution and not self._is_trivial_autofix(goal_description):
-            try:
-                allowed, reason, _ = self.constitution.is_action_allowed(
-                    f"修改 {rel_path}: {goal_description}"
-                )
-                self.audit.log_phase(audit_entry, "review", {
-                    "constitution": "allowed" if allowed else "denied",
-                    "reason": reason,
-                    "permission": "N/A",
-                })
-                if not allowed:
-                    logger.warning(f"Constitution 拒绝: {reason}")
-                    self.audit.finish_and_write(audit_entry, "rejected", f"Constitution: {reason}")
-                    return {"status": "failed", "error": f"Constitution: {reason}"}
-            except Exception as e:
-                logger.error(f"Constitution 检查异常: {e}")
-                pass
 
         if dry_run:
             return {
@@ -152,16 +120,13 @@ class AutonomousEvolutionEngine:
                 },
             }
 
-        # ---- Step 2: Execute (含权限前置) ----
+        # ---- Step 2: Execute ----
         rec.risk_level = proposal.risk_level
         new_code = self.proposer.generate_new_code(original_code, proposal)
         exec_result = self.executor.execute(abs_path, new_code, rec)
 
         if not exec_result.success:
             self.audit.log_phase(audit_entry, "execute", {"success": False, "error": exec_result.error})
-            if exec_result.error == "permission_denied":
-                self.audit.finish_and_write(audit_entry, "rejected", "权限审批未通过")
-                return {"status": "rejected", "error": "权限审批未通过"}
             self.audit.finish_and_write(audit_entry, "failed", exec_result.error)
             return {"status": "failed", "error": exec_result.error}
 
@@ -248,26 +213,7 @@ class AutonomousEvolutionEngine:
         if direction:
             improvements = self._sort_by_direction(improvements, direction)
 
-        # HardBoundary 风险分级：3级过滤
-        safe_improvements = []
-        needs_confirmation = []
-        for imp in improvements:
-            boundary = self._assess_improvement_risk(imp)
-            if boundary == BoundaryResult.FORBIDDEN:
-                logger.warning(f"跳过禁止修改: {imp.issue[:50]}")
-                continue
-            if boundary == BoundaryResult.NEEDS_CONFIRMATION:
-                needs_confirmation.append(imp)
-                continue
-            safe_improvements.append(imp)
-
-        result = self.execute_evolutions(safe_improvements)
-
-        # 附加需要确认的改进点
-        if needs_confirmation:
-            result["needs_confirmation"] = [
-                f"[NEEDS_CONFIRMATION] {imp.file}: {imp.issue[:80]}" for imp in needs_confirmation
-            ]
+        result = self.execute_evolutions(improvements)
 
         # 停机条件：连续失败
         failed_count = sum(
@@ -278,29 +224,6 @@ class AutonomousEvolutionEngine:
             result["stopped_reason"] = f"连续 {failed_count} 次进化失败，停止自主执行"
 
         return result
-
-    def _assess_improvement_risk(self, imp: ImprovementRecord) -> BoundaryResult:
-        """评估改进点的边界等级 — 3级：FORBIDDEN / NEEDS_CONFIRMATION / ALLOWED"""
-        issue_lower = (imp.issue or "").lower()
-        file_lower = (imp.file or "").lower()
-
-        # 修改安全底线相关文件 -> FORBIDDEN
-        forbidden_files = ["soul.md", "constitution.md", "autonomy.md"]
-        if any(f in file_lower for f in forbidden_files):
-            return BoundaryResult.FORBIDDEN
-
-        # 修改核心权限/执行器/硬边界 -> NEEDS_CONFIRMATION
-        core_files = ["executor.py", "constitution.py", "core.py", "facade_", "permission", "hard_boundary"]
-        if any(f in file_lower for f in core_files):
-            return BoundaryResult.NEEDS_CONFIRMATION
-
-        # 修小 bug / 补测试 -> ALLOWED
-        low_risk_keywords = ["缺少换行", "unused import", "typo", "test", "lint"]
-        if any(k in issue_lower for k in low_risk_keywords):
-            return BoundaryResult.ALLOWED
-
-        # 其他 -> ALLOWED（让云模型判断）
-        return BoundaryResult.ALLOWED
 
     def _sort_by_direction(self, improvements: List[ImprovementRecord], direction: str) -> List[ImprovementRecord]:
         """根据方向对改进点排序 — 与方向关键词匹配的优先"""
@@ -361,11 +284,6 @@ class AutonomousEvolutionEngine:
                 pass
 
         return results
-
-    @staticmethod
-    def _is_trivial_autofix(goal_description: str) -> bool:
-        """确定性、无语义变化的低风险自动修复。"""
-        return "文件末尾缺少换行" in goal_description
 
     # ------------------------------------------------------------------
     # discover_improvements / execute_evolutions
@@ -452,14 +370,10 @@ class AutonomousEvolutionEngine:
 
 
 def create_autonomous_evolution_engine(project_root: str = None,
-                                       permission_manager=None,
-                                       circuit_breaker=None,
-                                       constitution=None) -> AutonomousEvolutionEngine:
+                                       circuit_breaker=None) -> AutonomousEvolutionEngine:
     return AutonomousEvolutionEngine(
         project_root,
-        permission_manager=permission_manager,
         circuit_breaker=circuit_breaker,
-        constitution=constitution,
     )
 
 

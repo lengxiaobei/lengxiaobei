@@ -33,13 +33,15 @@ USER appuser
 ENV LENGXIAOBEI_ROOT=/app
 ENV PYTHONUNBUFFERED=1
 ENV LOG_LEVEL=INFO
+ENV LX_WEB_HOST=0.0.0.0
+ENV LX_WEB_PORT=8088
 
-# Expose ports (health check on 8000, web API if enabled)
-EXPOSE 8000 8080
+# Expose the Web API port
+EXPOSE 8088
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
+    CMD python -c "import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:%s/api/status' % os.environ.get('LX_WEB_PORT', '8088'))" || exit 1
 
-# Default command: run as daemon
-CMD ["python", "-m", "src.core"]
+# Default command: run the Blueprint-based Web app
+CMD ["python", "-m", "lx_web.app"]

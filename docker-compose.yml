@@ -10,12 +10,12 @@ services:
     container_name: lengxiaobei
     restart: unless-stopped
     ports:
-      - "8080:8080"   # Web interface
-      - "8081:8081"   # Memory layer API
-      - "8082:8082"   # Control layer API
+      - "${LX_WEB_PORT:-8088}:8088"   # Web interface
     environment:
       - LENGXIAOBEI_ROOT=/app
       - LOG_LEVEL=INFO
+      - LX_WEB_HOST=0.0.0.0
+      - LX_WEB_PORT=8088
       - AUTONOMY_LEVEL=80
       # LLM Configuration
       - LLM_MODEL=MiniMax-M2.7
@@ -37,7 +37,7 @@ services:
     networks:
       - lengxiaobei-net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8088/api/status"]
       interval: 30s
       timeout: 10s
       retries: 3

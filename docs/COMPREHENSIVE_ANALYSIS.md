@@ -6,9 +6,9 @@
 
 ## 核心架构
 
-### 1. 自主进化引擎 (2,347 行代码)
-- **文件**: `autonomous_evolution.py`
-- **功能**: 实现AI的自主进化能力，包含7层架构
+### 1. 自进化闭环
+- **文件**: `src/self_evolution.py`
+- **功能**: 将 Agent lesson 转成安全范围内的小步源码改进，包含 SAFE_TARGETS、expected_functions、验证与质量分层
   - 动机层 (Motivation Layer)
   - 目标层 (Goal Layer) 
   - 资源层 (Resource Layer)
@@ -33,9 +33,9 @@
 - **支持**: OpenAI, Claude, Bailian等多种提供商
 - **特点**: 智能路由、负载均衡、容错机制
 
-### 4. 开发团队模拟 (444 行代码)
-- **文件**: `dev_team.py`
-- **功能**: 模拟人类开发团队，包含多个AI角色
+### 4. 目标与自进化辅助模块
+- **文件**: `goal_system.py`, `active_learner.py`, `critic.py`, `testing.py`
+- **功能**: 支撑目标生成、主动学习、代码审查和验证
 - **角色**: 项目经理、架构师、开发者、测试工程师
 - **特点**: 协作决策、代码审查、质量保证
 

@@ -60,10 +60,10 @@ lengxiaobei/
 │   └── config/                   # 配置文件
 │
 ├── agents/                       # Agent 相关模块 (新建)
-│   ├── autonomous_evolution.py   # 自主进化
-│   ├── forked_agent.py           # 分身 Agent
-│   ├── dev_team.py               # 开发团队
-│   └── coordinator.py            # 协调器
+│   ├── self_evolution.py          # 自进化闭环
+│   ├── goal_system.py             # 目标系统
+│   ├── active_learner.py          # 主动学习
+│   └── critic.py                  # 代码审查
 │
 ├── services/                     # 服务层 (新建)
 │   ├── memory_service.py         # 记忆服务
@@ -106,11 +106,6 @@ lengxiaobei/
 │   └── budget.py                 # 预算管理
 │
 ├── memory_layer/                 # 记忆层 (Rust)
-│   ├── src/
-│   ├── Cargo.toml
-│   └── target/
-│
-├── control_layer/                # 控制层 (Rust)
 │   ├── src/
 │   ├── Cargo.toml
 │   └── target/
@@ -213,13 +208,6 @@ lengxiaobei/
 │
 ├── integrity/                    # 完整性检查
 │   └── check_result_*.json
-│
-├── lx-desktop/                   # 桌面应用
-│   ├── main.js
-│   ├── preload.js
-│   ├── package.json
-│   ├── renderer/
-│   └── assets/
 │
 ├── trae-plugin-lengxiaobei/      # Trae 插件
 │   ├── src/

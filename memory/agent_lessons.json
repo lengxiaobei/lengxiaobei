@@ -1023,14 +1023,14 @@
     "topic": "自主学习 Continue 的 IDE 上下文、代码库索引和开发者交互设计能力，并提炼一个可落地改进",
     "evidence": "GitHub Copilot的featureFlags中包含'copilot_chat_contextual_suggestions_updated'，表明其注重上下文感知建议。",
     "created_at": 1779442634.791339,
-    "applied_at": 1779443745.052753,
+    "applied_at": 1779454507.5899909,
     "result": {
       "status": "failed",
       "error": "进化引擎未配置",
       "expected_functions": [
         {
-          "name": "get_context_suggestions",
-          "signature": "get_context_suggestions(code_snippet: str) -> str",
+          "name": "capture_code_change_event",
+          "signature": "capture_code_change_event(event: dict) -> None",
           "kind": "function"
         }
       ]
@@ -1194,6 +1194,150 @@
           "missing": [],
           "callable_errors": []
         }
+      }
+    }
+  },
+  {
+    "id": "lesson_1779454604",
+    "source": "self_reflection",
+    "capability": "检索外部知识",
+    "pattern": "在 src/active_learner.py 中加一个 retrieve_external_knowledge 函数来调用外部API或访问本地知识库，以获取和整合信息",
+    "why_good": "补充外部知识获取能力，使冷小北能自主访问实时或广泛信息，提升学习深度和问题解决效果",
+    "adaptation": "['在 active_learner.py 中定义 retrieve_external_knowledge 函数接口', '实现函数使用 requests 库调用外部API或读取本地知识库文件', '在 active_learner 的学习流程中集成此函数以自动获取补充知识']",
+    "suggested_files": [
+      "src/active_learner.py"
+    ],
+    "status": "verified_degraded",
+    "topic": "开发一个知识检索模块，集成外部API或本地知识库，以增强冷小北在自主学习中的信息访问和整合能力",
+    "evidence": "冷小北在自主学习中缺乏外部知识工具，导致信息获取受限，学习内容可能过时或不完整",
+    "created_at": 1779454604.898506,
+    "applied_at": 1779455111.18271,
+    "result": {
+      "status": "verified_degraded",
+      "changed": true,
+      "file_path": "/Users/panhao/projects/lengxiaobei/src/active_learner.py",
+      "goal": "在 src/active_learner.py 中新增函数 retrieve_external_knowledge，用于通过查询字符串检索外部知识并返回整合后的信息字符串",
+      "added_functions": [
+        "retrieve_external_knowledge"
+      ],
+      "message": "主进化生成代码失败，已用确定性 fallback 在目标模块写入真实可调用函数。 ⚠ 降级完成：占位 fallback，未真实现 goal。",
+      "primary_target": "src/active_learner.py",
+      "primary_result": {
+        "status": "failed",
+        "error": "代码验证失败"
+      },
+      "fallback_target": "src/active_learner.py",
+      "fallback_kind": "deterministic_expected_function",
+      "expected_functions": [
+        {
+          "name": "retrieve_external_knowledge",
+          "signature": "retrieve_external_knowledge(query: str) -> str",
+          "kind": "function"
+        }
+      ],
+      "quality": {
+        "substantive": "degraded",
+        "reason": "only fallback occupants added: ['retrieve_external_knowledge']. LLM 主路径失败 → 系统写了死板的 if-else 占位，并非真智能代码。",
+        "added": [
+          "retrieve_external_knowledge"
+        ],
+        "changed_funcs": [],
+        "removed": [],
+        "real_funcs": [],
+        "fallback_funcs": [
+          "retrieve_external_knowledge"
+        ],
+        "before_def_count": 19,
+        "after_def_count": 20
+      },
+      "verification": {
+        "success": true,
+        "outputs": [
+          {
+            "command": "python3 -m compileall -q src",
+            "returncode": 0,
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "command": "pytest tests/test_core_modules.py -q",
+            "returncode": 0,
+            "stdout": "cts/lengxiaobei\nconfigfile: pytest.ini\nplugins: anyio-4.12.1, cov-7.1.0\ncollected 38 items\n\ntests/test_core_modules.py ......................................        [100%]\n\n=============================== warnings summary ===============================\ntests/test_core_modules.py::TestMemoryBackends::test_build_backend_chain_returns_list\n  <frozen importlib._bootstrap>:228: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute\n\ntests/test_core_modules.py::TestMemoryBackends::test_build_backend_chain_returns_list\n  <frozen importlib._bootstrap>:228: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute\n\ntests/test_core_modules.py::TestMemoryBackends::test_build_backend_chain_returns_list\n  <frozen importlib._bootstrap>:228: DeprecationWarning: builtin type swigvarlink has no __module__ attribute\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n================== 38 passed, 3 warnings in 60.60s (0:01:00) ===================\n",
+            "stderr": ""
+          }
+        ],
+        "capability_check": {
+          "all_callable": true,
+          "expected": [
+            "retrieve_external_knowledge"
+          ],
+          "found": [
+            "retrieve_external_knowledge"
+          ],
+          "missing": [],
+          "callable_errors": []
+        }
+      }
+    }
+  },
+  {
+    "id": "lesson_1779463833",
+    "source": "ChatGPT",
+    "capability": "状态反馈与按钮交互优化",
+    "pattern": "在响应生成时显示加载动画（如旋转图标），并为交互按钮（如复制、编辑）提供即时视觉反馈（如颜色变化或短暂动画）。",
+    "why_good": "增强用户对系统状态的感知，减少等待焦虑，提升交互流畅性和用户满意度。",
+    "adaptation": "冷小北可先在 Web 界面中添加一个简单的 CSS 加载动画，然后优化 JavaScript 中按钮事件的处理，以实现即时反馈。",
+    "suggested_files": [
+      "src/web/main.js",
+      "src/web/styles.css",
+      "src/web/components/loader.js"
+    ],
+    "status": "failed",
+    "topic": "参考优秀 Agent 控制台设计，改进冷小北 Web 界面的可用性、状态反馈和按钮交互",
+    "evidence": "ChatGPT 的 Web 界面通过清晰的视觉反馈机制，显著提高了用户交互体验。",
+    "created_at": 1779463833.064218,
+    "applied_at": 1779463927.574372,
+    "result": {
+      "status": "failed",
+      "file_path": "/Users/panhao/projects/lengxiaobei/src/learned_capabilities.py",
+      "goal": "在 src/learned_capabilities.py 中新增函数 toggle_loading_indicator，用于在响应生成时切换加载动画的显示状态",
+      "changed": true,
+      "message": "Lesson 已沉淀为源码级 learned capability。",
+      "expected_functions": [
+        {
+          "name": "toggle_loading_indicator",
+          "signature": "toggle_loading_indicator(show: bool) -> None",
+          "kind": "function"
+        }
+      ],
+      "verification": {
+        "success": false,
+        "outputs": [
+          {
+            "command": "python3 -m compileall -q src",
+            "returncode": 0,
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "command": "pytest tests/test_core_modules.py -q",
+            "returncode": 0,
+            "stdout": "cts/lengxiaobei\nconfigfile: pytest.ini\nplugins: anyio-4.12.1, cov-7.1.0\ncollected 38 items\n\ntests/test_core_modules.py ......................................        [100%]\n\n=============================== warnings summary ===============================\ntests/test_core_modules.py::TestMemoryBackends::test_build_backend_chain_returns_list\n  <frozen importlib._bootstrap>:228: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute\n\ntests/test_core_modules.py::TestMemoryBackends::test_build_backend_chain_returns_list\n  <frozen importlib._bootstrap>:228: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute\n\ntests/test_core_modules.py::TestMemoryBackends::test_build_backend_chain_returns_list\n  <frozen importlib._bootstrap>:228: DeprecationWarning: builtin type swigvarlink has no __module__ attribute\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n================== 38 passed, 3 warnings in 67.56s (0:01:07) ===================\n",
+            "stderr": ""
+          }
+        ],
+        "capability_check": {
+          "all_callable": false,
+          "expected": [
+            "toggle_loading_indicator"
+          ],
+          "found": [],
+          "missing": [
+            "toggle_loading_indicator"
+          ],
+          "callable_errors": []
+        },
+        "reason": "expected_functions 中有函数未真的被加进去或不可调用 — missing=['toggle_loading_indicator'], errors=[]"
       }
     }
   }

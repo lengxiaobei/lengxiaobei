@@ -148,4 +148,4 @@ jobs:
             docker-compose pull
             docker-compose up -d --remove-orphans
             sleep 30
-            curl -f http://localhost:8081/health
+            curl -f http://localhost:8088/api/status

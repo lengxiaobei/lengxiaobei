@@ -72,6 +72,8 @@ reports/
 
 # State files
 state/*.json
+state/*.jsonl
+state/*.pid
 integrity/*.json
 src/integrity/*.json
 
@@ -84,5 +86,10 @@ src/integrity/*.json
 
 # Memory data (user content)
 memory/memory.db
+memory/*.db-shm
+memory/*.db-wal
 memory/faiss_index.bin
+memory/curator/
 src/memory/*.db
+src/memory/*.db-shm
+src/memory/*.db-wal

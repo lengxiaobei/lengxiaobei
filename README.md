@@ -4,78 +4,70 @@
 
 ## 项目结构
 
-```
+```text
 lengxiaobei/
-├── src/                      # 核心源代码 (唯一源码入口)
-│   ├── core.py               # 编排器 (四 Facade 懒加载)
+├── lx_web.py                 # 兼容 wrapper；只调用 lx_web.app:create_app
+├── lx_web/                   # Blueprint 化 Web 后端
+│   ├── app.py                # 唯一 Web 应用工厂与 CLI 入口
+│   ├── blueprints/           # system/chat/evolution/learning/autonomy/memory/sse
+│   └── shared/               # Web 共享状态、SSE、middleware、工具函数
+├── src/                      # 核心 Agent 源码
+│   ├── core.py               # LengXiaobei 编排器，懒加载四大 Facade
 │   ├── facade_memory.py      # 记忆 Facade
 │   ├── facade_reasoning.py   # 推理 Facade
 │   ├── facade_evolution.py   # 进化 Facade
 │   ├── facade_guardian.py    # 守护 Facade
-│   ├── autonomous_evolution.py  # 重导出模块 → 实际实现在 evolution/
-│   ├── evolution/            # 进化子包
-│   │   ├── models.py         #   数据模型 (77行)
-│   │   ├── config.py         #   配置 & LLM 助手 (101行)
-│   │   ├── preparation.py    #   输入验证 & 提示构建 (261行)
-│   │   ├── execution.py      #   执行引擎 & 沙箱 (243行)
-│   │   └── engine.py         #   主编排器 (2094行)
-│   ├── constitution.py       # 宪法系统 (原则与合规检查)
-│   ├── evolution_permission.py  # 进化权限 (白名单 + 签名校验 + 人工审批)
-│   ├── circuit_breaker.py    # 熔断保护 (连续失败/资源超限暂停)
-│   ├── query_engine.py       # 查询引擎 V2
-│   ├── hybrid_memory.py      # 混合记忆 (SQLite + 向量)
-│   ├── memory.py             # 基础记忆
-│   ├── llm.py                # LLM 路由
-│   ├── config.py             # 配置管理
-│   ├── config_manager.py     # 多源配置管理
-│   ├── kairos.py             # KAIROS 后台守护
-│   ├── auto_dream.py         # AutoDream 夜间整理
-│   ├── mcp/                  # MCP 协议子包
-│   └── ...
-│
-├── models/                   # 数据模型 (enums, budget, state, etc.)
-├── prompts/                  # 角色与行为 MD (CRITIC.md, KAIROS.md, BUDDY.md, TEAM.md)
-├── memory/                   # 记忆持久化数据
-├── config/                   # 配置文件 (YAML/JSON)
-├── docs/                     # 设计文档
-├── tests/                    # 测试 (unit/integration/regression)
-│   └── unit/
-│       ├── test_constitution.py
-│       ├── test_circuit_breaker.py
-│       └── test_evolution_permission.py
-├── scripts/                  # 运维脚本
-│   ├── quick_approve.py
-│   ├── reset_circuit_breaker.py
-│   └── run_evolution.py
-├── control_layer/            # Rust 控制层 (进程守护 + HTTP 状态)
-├── config.json               # 运行时配置文件
-└── requirements.txt          # Python 依赖
+│   ├── self_evolution.py     # 快速自进化闭环与 SAFE_TARGETS
+│   ├── agent_learning.py     # Agent 经验学习与 lesson 存储
+│   ├── active_learner.py     # 主动学习
+│   ├── goal_system.py       # LLM 驱动目标管理
+│   ├── critic.py             # LLM 驱动代码审查
+│   ├── code_change_log.py    # 自主改动审计日志
+│   ├── testing.py            # 代码验证钩子
+│   ├── learned_capabilities.py # 能力注册表兜底目标
+│   ├── evolution/            # 进化引擎子包
+│   └── kairos/               # 事件总线与守护事件
+├── memory/                   # 运行记忆、lesson、run、code-change 持久化数据
+├── config/                   # 运行配置
+├── docs/                     # 设计与身份文档
+├── tests/                    # 单元/集成测试
+├── scripts/                  # 运维与自进化脚本
+├── Dockerfile
+├── docker-compose.yml
+├── pyproject.toml
+└── requirements.txt
 ```
 
 ## 架构概览
 
-```
-LengXiaobei (编排器)
-├── MemoryFacade     ← 记忆: hybrid_memory, knowledge_curator, auto_dream
-├── ReasoningFacade  ← 推理: query_engine, tool_registry, tool_builder, skills, model_router
-├── EvolutionFacade  ← 进化: autonomous_evolution, constitution, learner, critic, tester
-└── GuardianFacade   ← 守护: kairos, circuit_breaker, health_check, permission, budget
+```text
+LengXiaobei (src.core)
+├── MemoryFacade     ← hybrid_memory, knowledge_curator, auto_dream
+├── ReasoningFacade  ← query_engine, tool_registry, tool_builder, skills, model routing
+├── EvolutionFacade  ← evolution engine, self_evolution, learner, critic, testing
+└── GuardianFacade   ← kairos, circuit_breaker, health_check, permission, budget
+
+Web API (lx_web.app:create_app)
+├── system      ← 静态页面、/api/status、/api/health、runtime restart
+├── chat        ← /api/chat
+├── evolution   ← /api/evolution、/api/self-evolve、/api/evolve/*
+├── learning    ← lessons、runs、kanban、capability-check
+├── autonomy    ← autonomy status/start/stop/tick、execution views
+├── memory      ← memory search/refine/index、curator、summarize、dream
+└── sse         ← /api/events
 ```
 
-### 安全链
+Web 的唯一真实入口是 `lx_web.app:create_app()`；`lx_web.py` 只保留为兼容旧命令的薄 wrapper。端口统一使用 `LX_WEB_PORT`，默认 `8088`；主机使用 `LX_WEB_HOST`，默认脚本中为 `0.0.0.0`，测试中为 `127.0.0.1`。
 
-| 层级 | 作用 |
-|------|------|
-| 宪法 (constitution) | 原则与合规检查 |
-| 进化权限 (evolution_permission) | 目录白名单、签名校验、人工审批 |
-| 熔断 (circuit_breaker) | 连续失败 / 资源超限暂停进化 |
+自进化流程是：`AgentLearner` 生成 lesson，`SelfEvolutionCore` 从真实存在的 `SAFE_TARGETS` 中选择目标，构造 `expected_functions`，调用进化引擎或确定性 fallback，运行 `compileall` 与核心测试，再用 AST/import/callable 检查验证结果。质量信号拆成 `syntax_ok`、`function_exists`、`callable_ok`、`semantic_ok`、`integrated_ok`；`integrated_ok` 只有端到端业务链路证明后才应视为 true。
+
+目录边界以 [docs/DIRECTORY_RULES.md](docs/DIRECTORY_RULES.md) 为准，架构边界以 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) 为准。新增顶层目录必须同步更新文档和 `scripts/check_project_layout.py`，否则会被 `python3 -m src.doctor --quick` 标记出来。
 
 ## 快速开始
 
 ### 环境要求
 
-- Python 3.8+
-- Rust 1.70+ (控制层可选)
+- Python 3.10+
 
 ### 安装依赖
 
@@ -85,70 +77,74 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 环境配置 (可选)
-
-为了获得更好的模型下载体验并避免警告，建议配置 Hugging Face Token。
-
-1.  访问 [Hugging Face Tokens 页面](https://huggingface.co/settings/tokens) 创建一个 Token。
-2.  在您的 `~/.bashrc`, `~/.zshrc` 或其他 shell 配置文件中设置环境变量:
-
-    ```bash
-    export HF_TOKEN=your-huggingface-token-here
-    ```
-
-
-
-### 启动方式
+### 启动
 
 ```bash
-# 手动模式
+# Web 界面/API，默认 http://127.0.0.1:8088
+./start.sh
+
+# 等价的直接启动方式
+LX_WEB_PORT=8088 python3 -m lx_web.app
+
+# 兼容旧入口，同样会启动 lx_web.app
+LX_WEB_PORT=8088 python3 lx_web.py
+
+# 核心 Agent（非 Web）
 python3 -m src.core
 
 # 守护进程模式
 python3 daemon.py
+```
 
-# 启动脚本
-./start.sh
+### Docker
+
+```bash
+# 默认将宿主机 8088 映射到容器 8088
+LX_WEB_PORT=8088 docker compose up --build
 ```
 
 ## 配置
 
-编辑 `config.json`:
+`config.json` 与 `config/config.json` 保存运行配置；`LENGXIAOBEI_ROOT` 可指定项目根目录。LLM 相关环境变量包括 `LLM_API_KEY`、`LLM_MODEL`、`LLM_BASE_URL`。Web 相关环境变量统一为 `LX_WEB_HOST` 与 `LX_WEB_PORT`。
 
-```json
-{
-  "llm": {
-    "model": "MiniMax-M2.7",
-    "api_key": "your-api-key"
-  },
-  "memory_dir": "./memory",
-  "autonomy_level": 80,
-  "log_level": "INFO"
-}
-```
-
-支持环境变量 `LENGXIAOBEI_ROOT` 指定项目根目录。
-
-## 测试
+## 测试与质量检查
 
 ```bash
-pytest tests/unit/        # 单元测试 (宪法、熔断、权限、进化)
-pytest tests/integration/ # 集成测试
-pytest tests/             # 全部测试
+# 全部测试
+pytest tests/ -q
+
+# 单个测试文件
+pytest tests/test_integration_web.py -v -s
+
+# 单个测试用例
+pytest tests/test_integration_web.py::TestSystemModule::test_runtime_status -v -s
+
+# 核心模块测试（自进化验证也会跑它）
+pytest tests/test_core_modules.py -q
+
+# 语法/导入级编译检查
+python3 -m compileall -q src lx_web
+
+# CI 同款 runtime-breaking lint gate
+ruff check src/ tests/ --select E9,F63,F7,F82
+
+# 目录规范检查，防止智能体乱建顶层目录
+python3 scripts/check_project_layout.py
 ```
 
 ## 核心功能
 
-- **自主进化**: 代码自主优化，宪法约束 + 权限审批 + 熔断保护
-- **记忆系统**: SQLite + FAISS 向量数据库，四层记忆架构
-- **KAIROS 守护**: 后台常驻代理，定期状态评估与主动任务
-- **AutoDream**: 夜间记忆整理与知识点提取
-- **QueryEngine V2**: 会话、工具、权限、用量管理
-- **MCP 协议**: Model Context Protocol 集成
+- 自主进化：从 lesson 到源码小步改造，带安全边界、验证、质量分层和审计日志。
+- 记忆系统：以 `memory/` 下 JSON/日志为运行持久化层，并通过 MemoryFacade 暴露给核心。
+- KAIROS 事件：`src.kairos.events` 提供事件总线，Web SSE 将事件推送到前端。
+- Web 看板：学习、进化、自治、记忆和运行时状态通过 Blueprint API 暴露。
+- MCP/工具能力：通过现有 Facade、tool registry 和相关模块集成。
 
 ## 文档
 
 - [设计文档](docs/DESIGN.md)
+- [架构边界](docs/ARCHITECTURE.md)
+- [目录规范](docs/DIRECTORY_RULES.md)
 - [代理规范](docs/AGENTS.md)
 - [宪法](docs/CONSTITUTION.md)
 - [灵魂](docs/SOUL.md)
@@ -156,13 +152,9 @@ pytest tests/             # 全部测试
 
 ## 项目理念
 
-**克制、诚实、简洁。宪法为本，代码为用。**
+克制、诚实、简洁。宪法为本，代码为用。
 
 ## 状态
 
-- Phase: 2 (KAIROS 守护模式)
+- Phase: 2.1
 - 自主度：80%
-
----
-
-**冷小北 · 2026**

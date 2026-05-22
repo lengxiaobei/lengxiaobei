@@ -328,3 +328,14 @@ LEARNED_CAPABILITIES.append(
     'goal': '在 src/critic.py 中新增函数 diagnose_design_defects，用于分析系统日志、工具调用历史和用户反馈，识别设计模式中的问题并输出具体建议',
     'created_at': 1779444884.2732108}
 )
+
+LEARNED_CAPABILITIES.append(
+{   'id': 'lesson_1779463833',
+    'topic': '参考优秀 Agent 控制台设计，改进冷小北 Web 界面的可用性、状态反馈和按钮交互',
+    'source': 'ChatGPT',
+    'capability': '状态反馈与按钮交互优化',
+    'pattern': '在响应生成时显示加载动画（如旋转图标），并为交互按钮（如复制、编辑）提供即时视觉反馈（如颜色变化或短暂动画）。',
+    'adaptation': '冷小北可先在 Web 界面中添加一个简单的 CSS 加载动画，然后优化 JavaScript 中按钮事件的处理，以实现即时反馈。',
+    'goal': '在 src/learned_capabilities.py 中新增函数 toggle_loading_indicator，用于在响应生成时切换加载动画的显示状态',
+    'created_at': 1779463833.064218}
+)

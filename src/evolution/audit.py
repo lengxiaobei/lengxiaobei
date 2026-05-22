@@ -71,7 +71,7 @@ class AuditTrail:
     """进化审计日志 — JSONL 追加写入"""
 
     def __init__(self, project_root: str):
-        self.log_path = Path(project_root) / "evolution_runs.jsonl"
+        self.log_path = Path(project_root) / "state" / "evolution_runs.jsonl"
         self._ensure_dir()
 
     def _ensure_dir(self):
