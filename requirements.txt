@@ -1,15 +1,13 @@
-# Leng Xiaobei Phase 1 Dependencies
-# Minimal — no heavy ML libraries, pure Python
+# Core backend
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+requests>=2.31.0
+httpx>=0.25.0
+pyyaml>=6.0.0
 
-# Core
-requests>=2.31.0  # HTTP calls (SearXNG search, web fetch)
-jsonschema>=4.19.0  # JSON Schema validation
-flask>=2.0.0  # Web interface
-psutil>=5.9.0  # System monitoring
-
-# Optional: for vector embeddings (Phase 2)
-# sentence-transformers>=2.0
-# numpy>=1.24
-
-# Optional: for LLM calls (Phase 2)
-# openai>=1.0
+# Optional YourAgent adapters (install with `pip install -e .[full]`)
+# chromadb>=0.5.0       # OpenHuman-style persistent vector store
+# playwright>=1.40.0    # OpenClaw-style browser tool; run `playwright install chromium`
+# apscheduler>=3.10.0   # Optional scheduler backend; lightweight fallback is built in

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="LengXiaobei">
+  <rect width="128" height="128" rx="28" fill="#101820"/>
+  <rect x="28" y="38" width="72" height="56" rx="16" fill="#f7f3e8"/>
+  <circle cx="50" cy="64" r="7" fill="#101820"/>
+  <circle cx="78" cy="64" r="7" fill="#101820"/>
+  <path d="M52 80h24" stroke="#101820" stroke-width="6" stroke-linecap="round"/>
+  <path d="M64 24v14" stroke="#f7f3e8" stroke-width="6" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,8 @@
+name: example_skill
+trigger: "when this skill should be considered"
+status: pending
+steps:
+  - describe the first safe action
+metadata:
+  author: agent
+  version: "1.0"

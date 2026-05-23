@@ -55,6 +55,8 @@ target/
 # Node
 node_modules/
 dist/
+frontend/node_modules/
+frontend/dist/
 
 # Temporary files
 tmp/
@@ -85,6 +87,16 @@ src/integrity/*.json
 .sdk_state.json
 
 # Memory data (user content)
+data/sqlite/*.db
+data/sqlite/*.db-shm
+data/sqlite/*.db-wal
+data/chroma/*
+data/logs/*
+data/uploads/*
+!data/README.md
+!data/chroma/.gitkeep
+!data/logs/.gitkeep
+!data/uploads/.gitkeep
 memory/memory.db
 memory/*.db-shm
 memory/*.db-wal

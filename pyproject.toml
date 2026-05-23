@@ -4,20 +4,22 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lengxiaobei"
-version = "2.1.0"
-description = "冷小北 — 数字生命体 · 自演化 AI Agent"
-readme = "docs/README.md"
+version = "3.0.0"
+description = "LengXiaobei / YourAgent — local-first self-evolving multi-channel AI agent"
+readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
-authors = [{name = "潘豪", email = "panhao@example.com"}]
-keywords = ["ai-agent", "autonomous", "self-evolution", "digital-life"]
+authors = [{name = "panhao", email = "panhao@example.com"}]
+keywords = ["ai-agent", "autonomous", "self-evolution", "local-first", "youragent"]
 
 dependencies = [
-    "pyyaml>=6.0",
-    "httpx>=0.25",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
     "requests>=2.31",
-    "psutil>=5.9",
-    "flask>=2.0",
+    "httpx>=0.25",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
@@ -25,6 +27,9 @@ full = [
     "sentence-transformers>=2.0",
     "numpy>=1.24",
     "faiss-cpu>=1.7",
+    "chromadb>=0.5.0",
+    "playwright>=1.40.0",
+    "apscheduler>=3.10.0",
 ]
 dev = [
     "pytest>=7.0",
@@ -34,24 +39,20 @@ dev = [
 ]
 
 [project.scripts]
-lx = "src.cli:main"
+lengxiaobei = "backend.main:app"
 
 [project.urls]
 Homepage = "https://github.com/lengxiaobei/lengxiaobei"
 Repository = "https://github.com/lengxiaobei/lengxiaobei.git"
 
 [tool.setuptools]
-packages = [
-    "src",
-    "src.evolution",
-    "src.kairos",
-    "lx_web",
-    "lx_web.blueprints",
-    "lx_web.shared",
-]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["backend*"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["backend/tests"]
 python_files = ["test_*.py", "*_test.py"]
 addopts = "-q --tb=short"
 
