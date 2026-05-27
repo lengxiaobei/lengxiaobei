@@ -8,16 +8,6 @@ export type SystemStatus = {
   uptime_seconds?: number;
   project_root?: string;
   data_dir?: string;
-  kernels?: Array<{
-    kernel: "openclaw" | "hermes" | "openhuman" | string;
-    installed: boolean;
-    reachable: boolean;
-    callable: boolean;
-    status: "healthy" | "degraded" | "offline" | "unknown" | string;
-    public_message: string;
-    mode?: string;
-    details?: Record<string, unknown>;
-  }>;
   capabilities?: Array<{
     id: string;
     owner: string;
@@ -26,14 +16,6 @@ export type SystemStatus = {
     risk: string;
     requires_confirmation: boolean;
     enabled: boolean;
-  }>;
-  kernel_tasks?: Array<{
-    task_id: string;
-    status: string;
-    owner: string;
-    summary: string;
-    next_actions?: string[];
-    created_at?: number;
   }>;
   burn?: {
     active_session?: string | null;
@@ -53,24 +35,6 @@ export type SystemStatus = {
     last_goal?: string;
   };
   tools?: string[];
-  controlled_agents?: Array<{
-    id: "openclaw" | "hermes" | "openhuman" | string;
-    name: string;
-    kind?: string;
-    capabilities?: string[];
-    description?: string;
-    callable?: boolean;
-    installed?: boolean;
-    health?: {
-      ok?: boolean;
-      installed?: boolean;
-      gateway_online?: boolean;
-      gateway_compatible?: boolean;
-      owner_alive?: boolean;
-      port?: number;
-      error?: string;
-    };
-  }>;
 };
 
 type SystemStore = {

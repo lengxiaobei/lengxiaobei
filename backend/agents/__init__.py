@@ -1,6 +1,5 @@
-"""Local agent integration boundary."""
+"""Local agent discovery boundary."""
 
-from backend.agents.integrations import OpenClawIntegration, HermesIntegration, OpenHumanIntegration
 from backend.agents.local import LocalAgentHub
 
-__all__ = ["LocalAgentHub", "OpenClawIntegration", "HermesIntegration", "OpenHumanIntegration"]
+__all__ = ["LocalAgentHub"]

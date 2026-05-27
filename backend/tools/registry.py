@@ -54,10 +54,6 @@ class ToolRegistry:
         self.register("local_agent_list", self._local_agent_list)
         self.register("local_agent_describe", self._local_agent_describe)
         self.register("local_agent_run", self._local_agent_run)
-        self.register("controlled_agent_list", self._controlled_agent_list)
-        self.register("controlled_agent_status", self._controlled_agent_status)
-        self.register("controlled_agent_assign", self._controlled_agent_assign)
-        self.register("controlled_agent_tasks", self._controlled_agent_tasks)
         self.register("web_fetch", web.fetch)
         self.register("browser", browser.unavailable)
         self.register("browser_fetch_text", browser.fetch_text)
@@ -185,28 +181,3 @@ class ToolRegistry:
 
     def _local_agent_run(self, agent_id: str, prompt: str, timeout: int = 120) -> dict[str, Any]:
         return self.agent_hub.run_agent(agent_id=agent_id, prompt=prompt, timeout=timeout)
-
-    def _controlled_agent_list(self) -> list[dict[str, Any]]:
-        return self.agent_hub.list_controlled_agents()
-
-    def _controlled_agent_status(self, target: str = "all") -> dict[str, Any]:
-        return self.agent_hub.controlled_status(target=target)
-
-    def _controlled_agent_assign(
-        self,
-        task: str,
-        target: str = "auto",
-        context: str = "",
-        timeout: int = 300,
-        execute: bool = True,
-    ) -> dict[str, Any]:
-        return self.agent_hub.assign_task(
-            task=task,
-            target=target,
-            context=context,
-            timeout=timeout,
-            execute=execute,
-        )
-
-    def _controlled_agent_tasks(self, limit: int = 20) -> dict[str, Any]:
-        return self.agent_hub.task_status(limit=limit)

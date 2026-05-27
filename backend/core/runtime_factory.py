@@ -13,7 +13,6 @@ from backend.autonomy.loop import AutonomyEngine
 from backend.core.commander import Commander
 from backend.core.context import RuntimeContext
 from backend.core.dispatcher import Dispatcher
-from backend.core.capability_registry import CapabilityRegistry
 from backend.evolution.burn import BurnEngine
 from backend.evolution.reflector import Reflector
 from backend.evolution.skill_store import SkillStore
@@ -127,14 +126,13 @@ def build_runtime(project_root: Path | None = None, data_dir: Path | None = None
 
     scheduler = RuntimeScheduler(logger)
     scheduler.add_interval_job("memory-reindex", 20 * 60, lambda: vector_store.reindex(limit=1000))
-    scheduler.add_interval_job("hermes-reflect", 30 * 60, lambda: reflector.reflect("scheduled reflection", force_skill=True))
+    scheduler.add_interval_job("reflection", 30 * 60, lambda: reflector.reflect("scheduled reflection", force_skill=True))
     scheduler.add_interval_job("autonomy-loop", 15 * 60, lambda: autonomy.tick("scheduled autonomy loop"))
     scheduler.add_interval_job("memory-promotion", 30 * 60, lambda: _run_promotion(memory_hooks, settings))
     scheduler.add_interval_job("mcp-health", 10 * 60, lambda: _check_mcp(mcp_manager))
     scheduler.add_interval_job("code-quality-check", 60 * 60, lambda: autonomy.tick("scheduled code quality check", force=True))
-    capability_registry = CapabilityRegistry()
     user_profile = UserProfileManager(sqlite)
-    commander = Commander(dispatcher=dispatcher, memory=memory_tree, logger=logger, capability_registry=capability_registry, user_profile=user_profile, agent_loop=agent_loop)
+    commander = Commander(dispatcher=dispatcher, memory=memory_tree, logger=logger, user_profile=user_profile, agent_loop=agent_loop)
 
     runtime = RuntimeContext(
         project_root=root,
@@ -147,7 +145,6 @@ def build_runtime(project_root: Path | None = None, data_dir: Path | None = None
         tools=tools,
         dispatcher=dispatcher,
         commander=commander,
-        capability_registry=capability_registry,
         autonomy=autonomy,
         reflector=reflector,
         skill_store=skill_store,

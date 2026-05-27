@@ -107,16 +107,6 @@ class MCPManager:
             except Exception as exc:
                 logger.warning("Failed to parse MCP_SERVERS_JSON: %s", exc)
 
-        # Method 2: Auto-register OpenClaw gateway if available
-        openclaw_url = os.getenv("OPENCLAW_MCP_URL", "http://localhost:18789")
-        if openclaw_url and "openclaw" not in self._servers:
-            self.register_server(MCPServerConfig(
-                name="openclaw",
-                url=f"{openclaw_url}/mcp",
-                transport="sse",
-                timeout=120,
-            ))
-
     async def connect_server(self, name: str) -> bool:
         """Connect to a single MCP server and discover its tools."""
         if not MCP_AVAILABLE:

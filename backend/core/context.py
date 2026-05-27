@@ -40,7 +40,6 @@ class RuntimeContext:
     tools: Any
     dispatcher: Any
     commander: Any
-    capability_registry: Any
     autonomy: Any
     reflector: Any
     skill_store: Any

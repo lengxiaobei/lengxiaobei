@@ -1,5 +1,4 @@
 from pathlib import Path
-import json
 
 from backend.agents.local import LocalAgentHub
 from backend.tools.registry import ToolRegistry
@@ -60,44 +59,16 @@ def test_local_agent_tools_are_registered(tmp_path: Path):
     assert any(agent["name"] == "Soul Agent" for agent in tools.get("local_agent_list")())
 
 
-def test_controlled_agents_are_available(tmp_path: Path):
-    (tmp_path / ".openhuman").mkdir()
-    hub = LocalAgentHub(roots=[], config_path=tmp_path / "local_agents.json", home=tmp_path)
-
-    agents = hub.list_controlled_agents()
-
-    assert [agent["id"] for agent in agents] == ["openclaw", "hermes", "openhuman"]
-    assert agents[0]["kind"] == "gateway"
-    assert agents[0]["callable"] is False
-    assert agents[0]["health"]["gateway_online"] is False
-    assert agents[0]["health"]["gateway_compatible"] is False
-    assert agents[2]["callable"] is True
-
-
-def test_assign_task_to_memory_lane_records_compat_task(tmp_path: Path):
-    openhuman = tmp_path / ".openhuman"
-    user_dir = openhuman / "users" / "user-1"
-    user_dir.mkdir(parents=True)
-    (openhuman / "active_user.toml").write_text('user_id = "user-1"\n')
-    hub = LocalAgentHub(roots=[], config_path=tmp_path / "local_agents.json", home=tmp_path)
-
-    result = hub.assign_task("sync my personal memory", target="openhuman", execute=True)
-
-    assert result["ok"] is True
-    assert result["target"]["id"] == "openhuman"
-    task_files = list((tmp_path / "agent_tasks").glob("*-openhuman.json"))
-    assert len(task_files) == 1
-    task = json.loads(task_files[0].read_text())
-    assert task["agent_id"] == "openhuman"
-    assert task["agent_name"] == "记忆连续性"
-    assert task["result"]["ok"] is True
-
-
-def test_controlled_agent_tools_are_registered(tmp_path: Path):
+def test_reference_agent_control_tools_are_not_registered(tmp_path: Path):
     hub = LocalAgentHub(roots=[], config_path=tmp_path / "local_agents.json", home=tmp_path)
     tools = ToolRegistry(tmp_path, agent_hub=hub)
 
-    assert "controlled_agent_list" in tools.list()
-    assert "controlled_agent_status" in tools.list()
-    assert "controlled_agent_assign" in tools.list()
-    assert "controlled_agent_tasks" in tools.list()
+    prefix = "_".join(("controlled", "agent"))
+    forbidden = [
+        f"{prefix}_list",
+        f"{prefix}_status",
+        f"{prefix}_assign",
+        f"{prefix}_tasks",
+    ]
+    for name in forbidden:
+        assert name not in tools.list()

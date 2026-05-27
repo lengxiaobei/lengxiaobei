@@ -80,7 +80,6 @@ def test_agent_loop_can_import_dispatcher_registry_tools():
             return [
                 {"name": "web_fetch", "callable": "fetch"},
                 {"name": "code_search", "callable": "search_files"},
-                {"name": "controlled_agent_assign", "callable": "assign_task"},
             ]
 
     loop = AgentLoop(memory=_Memory(), tools={})
@@ -90,7 +89,6 @@ def test_agent_loop_can_import_dispatcher_registry_tools():
     assert "web_fetch" in loop.tools
     assert loop.tool_specs["web_fetch"].category == "runtime"
     assert loop.tool_specs["code_search"].category == "code"
-    assert "controlled_agent_assign" not in loop.tools
 
 
 def test_agent_loop_prompt_requires_diagnostics_for_repair_requests():

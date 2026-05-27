@@ -265,10 +265,6 @@ def get_skill_loader(
         env_dirs = os.getenv("SKILL_DIRS", "")
         if env_dirs:
             dirs.extend(Path(d.strip()) for d in env_dirs.split(",") if d.strip())
-        # OpenClaw skills directory
-        openclaw_skills = Path.home() / ".openclaw" / "skills"
-        if openclaw_skills.exists():
-            dirs.append(openclaw_skills)
         # Project-local skills
         project_skills = Path.home() / "projects" / "lengxiaobei" / "skills"
         if project_skills.exists():

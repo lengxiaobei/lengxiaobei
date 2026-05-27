@@ -291,8 +291,6 @@ def register_dispatcher_tools(agent_loop: Any, dispatcher: Any, tool_registry: A
         name = str(item.get("name") or "")
         if not name or name in agent_loop.tools:
             continue
-        if name.startswith("controlled_agent_"):
-            continue
 
         async def _tool(args: dict[str, Any], _name: str = name) -> dict[str, Any]:
             return await _dispatch(_name, args)

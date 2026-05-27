@@ -65,7 +65,7 @@ DEFAULT_GOALS = [
         ],
     ),
     AutonomyGoal(
-        id="openclaw-tool-authority",
+        id="native-tool-authority",
         title="Project-scoped write/execute authority",
         reference="LengXiaobei native authority",
         objective="Give LengXiaobei powerful project-scoped tool execution for self-modification while preserving root boundaries and audit traces.",
@@ -73,7 +73,7 @@ DEFAULT_GOALS = [
         next_actions=["Inspect tool traces", "Run project checks", "Propose next guarded tool"],
     ),
     AutonomyGoal(
-        id="openclaw-channel-runtime",
+        id="native-channel-runtime",
         title="Production channel runtime",
         reference="LengXiaobei native channels",
         objective="Turn LengXiaobei's optional Telegram/WhatsApp/Slack boundaries into observable, reconnecting channel runtimes.",
@@ -81,7 +81,7 @@ DEFAULT_GOALS = [
         next_actions=["Study local channel runtime patterns", "Draft lifecycle checks", "Add channel health events"],
     ),
     AutonomyGoal(
-        id="openhuman-memory-graph",
+        id="native-memory-graph",
         title="Memory graph enrichment",
         reference="LengXiaobei native memory",
         objective="Improve LengXiaobei's MemoryTree with entity extraction, timeline links, graph edges, and editable provenance.",
@@ -89,7 +89,7 @@ DEFAULT_GOALS = [
         next_actions=["Learn graph memory patterns", "Index recent memories", "Draft entity extraction skill"],
     ),
     AutonomyGoal(
-        id="openhuman-sync-connectors",
+        id="native-sync-connectors",
         title="Real sync connectors",
         reference="LengXiaobei native sync",
         objective="Upgrade LengXiaobei's placeholder sync connectors into authenticated incremental sync jobs with conflict handling.",
@@ -97,7 +97,7 @@ DEFAULT_GOALS = [
         next_actions=["Fetch connector docs", "Draft connector contract", "Add sync status validation"],
     ),
     AutonomyGoal(
-        id="hermes-skill-verification",
+        id="native-skill-verification",
         title="Skill verification loop",
         reference="LengXiaobei native skills",
         objective="Promote LengXiaobei-generated skills only after replay, tests, evaluation, and rollback metadata are available.",
@@ -105,7 +105,7 @@ DEFAULT_GOALS = [
         next_actions=["Inspect recent traces", "Generate pending verifier skill", "Run skill store checks"],
     ),
     AutonomyGoal(
-        id="hermes-reflection-evaluator",
+        id="native-reflection-evaluator",
         title="Reflection and evaluator depth",
         reference="LengXiaobei native reflection",
         objective="Convert LengXiaobei's raw reflections into measurable hypotheses, pass/fail criteria, and versioned improvements.",

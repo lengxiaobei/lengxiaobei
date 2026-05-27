@@ -30,11 +30,10 @@ class TaskPlan:
 class Commander:
     """把用户输入翻译成计划、工具调用和最终回复。"""
 
-    def __init__(self, dispatcher: Any, memory: Any, logger: Any, capability_registry: Any | None = None, user_profile: Any | None = None, agent_loop: Any | None = None):
+    def __init__(self, dispatcher: Any, memory: Any, logger: Any, user_profile: Any | None = None, agent_loop: Any | None = None):
         self.dispatcher = dispatcher
         self.memory = memory
         self.logger = logger
-        self.capability_registry = capability_registry
         self.user_profile = user_profile
         self.agent_loop = agent_loop
 
@@ -117,10 +116,6 @@ class Commander:
         if self._is_code_modification_request(compact, norm):
             return TaskPlan("code_modification", "code_engineer", {"task": text}, "用户要求修改项目源码")
 
-        # Compound intents that need extra args
-        if self._is_controlled_agent_assignment(compact, norm):
-            return TaskPlan("chat", None, {}, "用户提到参考系统；按冷小北原生能力交给 AgentLoop 处理")
-
         # Keyword-based fallback
         if "状态" in text or "status" in norm or "健康" in text:
             return TaskPlan("system_status", "system_status", {}, "用户询问运行状态")
@@ -159,25 +154,6 @@ class Commander:
         mentions_gateway = "网关" in compact or "gateway" in norm
         asks_restart = any(word in compact for word in ("重启", "重新启动", "restart", "reload"))
         return mentions_gateway and asks_restart
-
-    def _is_reference_agent_connect_request(self, compact: str, norm: str) -> bool:
-        mentions_reference = any(name in compact for name in ("openclaw", "hermes", "openhuman"))
-        asks_connect = any(word in compact for word in ("接入", "连接", "控制", "分配任务", "派任务")) or "assign" in norm
-        return mentions_reference and asks_connect
-
-    def _is_controlled_agent_assignment(self, compact: str, norm: str) -> bool:
-        mentions_reference = any(name in compact for name in ("openclaw", "hermes", "openhuman"))
-        asks_assign = any(word in compact for word in ("让", "给", "派", "分配", "交给", "控制")) or "assign" in norm
-        return mentions_reference and asks_assign and not any(word in compact for word in ("接入", "连接"))
-
-    def _controlled_agent_target(self, compact: str) -> str:
-        if "openclaw" in compact:
-            return "openclaw"
-        if "hermes" in compact:
-            return "hermes"
-        if "openhuman" in compact:
-            return "openhuman"
-        return "auto"
 
     def _is_code_modification_request(self, compact: str, norm: str) -> bool:
         """Detect requests to modify project source code."""
@@ -534,23 +510,6 @@ class Commander:
                 lines.append(f"- {agent.get('name')} [{agent.get('id')}]：{callable_label}；{markers}")
             suffix = "" if len(agents) <= 12 else f"\n另有 {len(agents) - 12} 个未展开。"
             return "已接入本地 agent 发现层，当前发现：\n" + "\n".join(lines) + suffix
-        if observation.get("tool") == "controlled_agent_list":
-            agents = observation.get("result") or []
-            lines = []
-            for agent in agents:
-                callable_label = "可命令执行" if agent.get("callable") else "通过 inbox 投递"
-                lines.append(f"- {agent.get('name')} [{agent.get('id')}]：{callable_label}；{agent.get('description')}")
-            return "当前保留的是兼容发现层，不是冷小北的能力目标；原生能力应优先落在通道、反思技能和记忆连续性里：\n" + "\n".join(lines)
-        if observation.get("tool") == "controlled_agent_assign":
-            result = observation.get("result") or {}
-            target = (result.get("target") or {}).get("name", "unknown")
-            direct_result = result.get("result") or {}
-            if result.get("ok"):
-                return f"已把任务分配给 {target}，正在等待它回传处理结果。"
-            if (result.get("assignment") or {}).get("ok"):
-                return f"已把任务投递给 {target}。它会进入本地任务队列继续处理，我会保留这次巡检记录。"
-            error = direct_result.get("error") or "任务投递没有完成"
-            return f"{target} 暂时没有接住任务：{error}"
         if observation.get("tool") == "memory_search":
             results = observation.get("result") or []
             if not results:
@@ -624,8 +583,6 @@ def _check_gateway_restart(compact: str, norm: str) -> bool:
 
 
 def _check_reference_agent_connect(compact: str, norm: str) -> bool:
-    ref = any(kw in compact for kw in ("openclaw", "hermes", "openhuman"))
-    connect = any(kw in compact for kw in ("接入", "连接", "控制", "分配任务", "派任务")) or "assign" in norm
     return False
 
 
@@ -643,6 +600,5 @@ Commander._INTENT_TABLE = [
     ("reference_gap", None, "用户询问对标 OpenClaw/Hermes/OpenHuman 的能力差距", _check_reference_gap),
     ("model_info", None, "用户询问当前模型配置", _check_model_question),
     ("gateway_restart", None, "用户要求重启 lengxiaobei 后端网关", _check_gateway_restart),
-    ("controlled_agents", "controlled_agent_list", "兼容发现层已停用；优先冷小北原生能力", _check_reference_agent_connect),
     ("local_agents", "local_agent_list", "用户希望接入或查看本地 agent", _check_local_agent),
 ]

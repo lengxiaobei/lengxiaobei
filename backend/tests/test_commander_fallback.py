@@ -16,11 +16,6 @@ class _Memory:
         return []
 
 
-class _RegistryThatMustNotRun:
-    async def match(self, text):
-        raise AssertionError("capability registry should not intercept conversation before AgentLoop")
-
-
 class _AgentLoop:
     async def handle(self, text, channel="web"):
         class Result:
@@ -118,18 +113,17 @@ def test_reference_agent_assignment_stays_native():
 
     plan = commander._plan("让 Hermes 反思最近失败的技能生成任务")
 
-    assert plan.intent == "chat"
-    assert plan.tool is None
+    assert plan.intent == "reflect"
+    assert plan.tool == "reflect"
 
 
-def test_reference_agent_message_uses_agent_loop_not_capability_registry():
+def test_reference_agent_message_uses_agent_loop():
     import asyncio
 
     commander = Commander(
         dispatcher=None,
         memory=_Memory(),
         logger=None,
-        capability_registry=_RegistryThatMustNotRun(),
         agent_loop=_AgentLoop(),
     )
 

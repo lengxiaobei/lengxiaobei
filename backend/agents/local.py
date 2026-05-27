@@ -1,26 +1,16 @@
-"""Simple local agent discovery and invocation.
-
-This module is intentionally thin: lengxiaobei should know how to find local
-agents and hand work to them, without importing every agent framework directly.
-"""
+"""Simple local agent discovery and invocation."""
 
 from __future__ import annotations
 
-import asyncio
-import inspect
 import json
 import os
 import re
 import subprocess
-import threading
 import time
 import uuid
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
-
-from backend.agents.integrations import build_reference_integrations
-
 
 MARKER_FILES = (
     "AGENTS.md",
@@ -74,7 +64,6 @@ class LocalAgentHub:
             logger = logging.getLogger(__name__)
             logger.warning(f"Could not create task directory {self.task_dir}: {e}", exc_info=True)
         self.max_depth = max_depth
-        self.integrations = build_reference_integrations(home=self.home)
 
     def list_agents(self, refresh: bool = True) -> list[dict[str, Any]]:
         agents = self._load_agents(refresh=refresh)
@@ -92,46 +81,14 @@ class LocalAgentHub:
                 })
         return result
 
-    def list_controlled_agents(self) -> list[dict[str, Any]]:
-        agents: list[dict[str, Any]] = []
-        for integration in self.integrations.values():
-            status = self._integration_status(integration)
-            profile = dict(status.get("profile") or integration.profile().as_dict())
-            profile["kind"] = self._integration_kind(profile.get("id", ""))
-            profile["name"] = self._native_lane_name(profile.get("id", ""), profile.get("name", ""))
-            profile["description"] = self._native_lane_description(profile.get("id", ""), profile.get("description", ""))
-            profile["callable"] = bool(status.get("ok"))
-            profile["installed"] = bool(status.get("installed", status.get("ok")))
-            profile["health"] = self._public_health(status)
-            agents.append(profile)
-        return agents
-
-    def controlled_status(self, target: str = "all") -> dict[str, Any]:
-        integration = self._integration(target)
-        if integration:
-            return self._integration_status(integration)
-        return {"ok": True, "items": {name: self._integration_status(item) for name, item in self.integrations.items()}}
-
     def describe_agent(self, agent_id: str) -> dict[str, Any]:
-        agent = self._find(agent_id) or self._controlled_agent(agent_id)
+        agent = self._find(agent_id)
         if not agent:
             return {"ok": False, "error": f"local agent not found: {agent_id}"}
         return {"ok": True, "agent": agent.public_dict(include_command=True)}
 
     def run_agent(self, agent_id: str, prompt: str, timeout: int = 120, execute: bool = True) -> dict[str, Any]:
-        integration = self._integration(agent_id)
-        if integration:
-            if not execute:
-                return self._write_task(
-                    agent=self._controlled_agent(agent_id),
-                    prompt=prompt,
-                    mode="queued",
-                )
-            result = integration.assign_task(prompt, timeout=timeout)
-            if inspect.isawaitable(result):
-                return self._run_awaitable_in_thread(result)
-            return result
-        agent = self._find(agent_id) or self._controlled_agent(agent_id)
+        agent = self._find(agent_id)
         if not agent:
             return {"ok": False, "error": f"local agent not found: {agent_id}"}
         if not execute:
@@ -157,37 +114,6 @@ class LocalAgentHub:
             "stderr": proc.stderr,
         }
 
-    def assign_task(
-        self,
-        task: str,
-        target: str = "auto",
-        context: str = "",
-        timeout: int = 300,
-        execute: bool = True,
-    ) -> dict[str, Any]:
-        agent = self._select_controlled_agent(target=target, task=task)
-        prompt = self._task_prompt(task=task, context=context, agent=agent)
-        integration = self._integration(agent.id)
-        result = (
-            integration.assign_task(task=task, context=context, timeout=timeout)
-            if integration and execute
-            else self.run_agent(agent.id, prompt, timeout=timeout, execute=execute)
-        )
-        if inspect.isawaitable(result):
-            result = self._run_awaitable_in_thread(result)
-        assignment = self._write_task(
-            agent=agent,
-            prompt=prompt,
-            mode="integrated" if integration and execute else "executed" if execute and agent.command else "queued",
-            result=result,
-        )
-        return {
-            "ok": result.get("ok", False),
-            "target": agent.public_dict(),
-            "assignment": assignment,
-            "result": result,
-        }
-
     def task_status(self, limit: int = 20) -> dict[str, Any]:
         if not self.task_dir.exists():
             return {"ok": True, "tasks": []}
@@ -202,156 +128,11 @@ class LocalAgentHub:
     def _load_agents(self, refresh: bool = True) -> list[LocalAgent]:
         del refresh  # kept for API clarity; discovery is cheap enough for now.
         agents: dict[str, LocalAgent] = {}
-        for agent in self._controlled_agents():
-            agents[agent.id] = agent
         for agent in self._load_configured_agents():
             agents[agent.id] = agent
         for agent in self._discover_agents():
             agents.setdefault(agent.id, agent)
         return sorted(agents.values(), key=lambda item: (item.source, item.name.lower(), item.root))
-
-    def _controlled_agents(self) -> list[LocalAgent]:
-        return [self._agent_from_integration(item) for item in self.integrations.values()]
-
-    def _controlled_agent(self, agent_id: str) -> LocalAgent | None:
-        normalized = agent_id.strip().lower()
-        aliases = {
-            "claw": "openclaw",
-            "open-claw": "openclaw",
-            "hermes-agent": "hermes",
-            "open-human": "openhuman",
-        }
-        normalized = aliases.get(normalized, normalized)
-        for agent in self._controlled_agents():
-            if agent.id == normalized or agent.name.lower() == normalized:
-                return agent
-        return None
-
-    def _integration(self, target: str):
-        normalized = target.strip().lower()
-        aliases = {
-            "claw": "openclaw",
-            "open-claw": "openclaw",
-            "hermes-agent": "hermes",
-            "open-human": "openhuman",
-        }
-        return self.integrations.get(aliases.get(normalized, normalized))
-
-    def _agent_from_integration(self, integration: Any) -> LocalAgent:
-        profile = integration.profile()
-        root = self._integration_root(profile.id)
-        return LocalAgent(
-            id=profile.id,
-            name=self._native_lane_name(profile.id, profile.name),
-            root=str(root),
-            markers=self._markers_for(root),
-            description=self._native_lane_description(profile.id, profile.description),
-            command=[],
-            source="integrated",
-        )
-
-    def _native_lane_name(self, agent_id: str, fallback: str) -> str:
-        names = {
-            "openclaw": "通道运行时",
-            "hermes": "反思技能核",
-            "openhuman": "记忆连续性",
-        }
-        return names.get(agent_id, fallback)
-
-    def _native_lane_description(self, agent_id: str, fallback: str) -> str:
-        descriptions = {
-            "openclaw": "冷小北原生通道、网关、插件和工具巡检能力线。",
-            "hermes": "冷小北原生反思、技能生成、验证和评估能力线。",
-            "openhuman": "冷小北原生画像、长期记忆、同步资料和上下文连续性能力线。",
-        }
-        return descriptions.get(agent_id, fallback)
-
-    def _integration_root(self, agent_id: str) -> Path:
-        roots = {
-            "openclaw": self.home / ".openclaw",
-            "hermes": self.home / ".hermes",
-            "openhuman": self.home / ".openhuman",
-        }
-        return roots.get(agent_id, self.home)
-
-    def _integration_kind(self, agent_id: str) -> str:
-        kinds = {
-            "openclaw": "gateway",
-            "hermes": "orchestrator",
-            "openhuman": "memory",
-        }
-        return kinds.get(agent_id, "agent")
-
-    def _public_health(self, status: dict[str, Any]) -> dict[str, Any]:
-        health = {
-            "ok": bool(status.get("ok")),
-            "installed": bool(status.get("installed", status.get("ok"))),
-        }
-        if "gateway_online" in status:
-            health["gateway_online"] = bool(status.get("gateway_online"))
-        if "gateway_compatible" in status:
-            health["gateway_compatible"] = bool(status.get("gateway_compatible"))
-        if "owner_alive" in status:
-            health["owner_alive"] = bool(status.get("owner_alive"))
-        gateway = status.get("gateway") or {}
-        if isinstance(gateway, dict) and gateway.get("port"):
-            health["port"] = gateway.get("port")
-        if status.get("error"):
-            health["error"] = str(status.get("error"))
-        return health
-
-    def _integration_status(self, integration: Any) -> dict[str, Any]:
-        status = integration.status()
-        if not inspect.isawaitable(status):
-            return status or {}
-        try:
-            asyncio.get_running_loop()
-        except RuntimeError:
-            return asyncio.run(status)
-        return self._run_awaitable_in_thread(status)
-
-    def _run_awaitable_in_thread(self, awaitable: Any) -> dict[str, Any]:
-        result: dict[str, Any] = {}
-        error: BaseException | None = None
-
-        def runner() -> None:
-            nonlocal result, error
-            try:
-                result = asyncio.run(awaitable) or {}
-            except BaseException as exc:  # pragma: no cover - defensive thread bridge
-                error = exc
-
-        thread = threading.Thread(target=runner, daemon=True)
-        thread.start()
-        thread.join(timeout=8)
-        if thread.is_alive():
-            return {"ok": False, "installed": False, "error": "status check timed out"}
-        if error:
-            return {"ok": False, "installed": False, "error": str(error)}
-        return result
-
-    def _select_controlled_agent(self, target: str, task: str) -> LocalAgent:
-        requested = self._controlled_agent(target)
-        if requested:
-            return requested
-        normalized = task.lower()
-        if any(word in normalized for word in ("channel", "gateway", "slack", "telegram", "whatsapp", "plugin", "device", "tool")):
-            return self._controlled_agent("openclaw")
-        if any(word in normalized for word in ("skill", "reflect", "evaluate", "trajectory", "hermes", "self-improve")):
-            return self._controlled_agent("hermes")
-        if any(word in normalized for word in ("memory", "profile", "sync", "openhuman", "personal data", "knowledge")):
-            return self._controlled_agent("openhuman")
-        return self._controlled_agent("openclaw")
-
-    def _task_prompt(self, task: str, context: str, agent: LocalAgent) -> str:
-        parts = [
-            f"You are being controlled by lengxiaobei as the downstream {agent.name} agent.",
-            "Complete the assigned task and return a concise result with actions taken, files changed, and blockers.",
-            f"Task: {task}",
-        ]
-        if context:
-            parts.append(f"Context: {context}")
-        return "\n\n".join(parts)
 
     def _write_task(
         self,
@@ -526,9 +307,4 @@ class LocalAgentHub:
     def _default_roots(self) -> list[Path]:
         return [
             self.home / ".codex",
-            self.home / ".openclaw",
-            self.home / ".hermes",
-            self.home / "openclaw",
-            self.home / "hermes-agent",
-            self.home / "projects",
         ]
