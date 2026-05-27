@@ -181,6 +181,7 @@ class AgentLoop:
         ]
         final_reply = ""
         iterations = 0
+        tool_observations: list[dict[str, Any]] = []
 
         for round_num in range(self.config.max_tool_rounds):
             iterations = round_num + 1
@@ -189,7 +190,9 @@ class AgentLoop:
             llm_response = await self._call_llm(conversation, system_prompt)
 
             if not llm_response:
-                final_reply = "模型服务暂时不可用，请稍后再试。"
+                final_reply = self._fallback_reply_from_tool_observations(tool_observations)
+                if not final_reply:
+                    final_reply = "模型接口已连通，但这一轮返回了空内容；我没有拿到可展示的回答。"
                 break
 
             # Parse tool calls from LLM response
@@ -205,6 +208,7 @@ class AgentLoop:
             for tc in tool_calls:
                 all_tool_calls.append(tc)
                 result = await self._execute_tool(tc["name"], tc["args"])
+                tool_observations.append({"tool": tc["name"], "args": tc["args"], "result": result})
                 result_text = json.dumps(result, ensure_ascii=False, default=str)
                 # Truncate very long results to avoid context overflow
                 if len(result_text) > 4000:
@@ -220,6 +224,12 @@ class AgentLoop:
         else:
             # Max rounds reached
             final_reply = self._strip_tool_tags(llm_response) if llm_response else "达到最大工具调用轮次，请简化请求。"
+
+        final_reply = final_reply.strip()
+        if not final_reply:
+            final_reply = self._fallback_reply_from_tool_observations(tool_observations)
+        if not final_reply:
+            final_reply = "模型接口已连通，但最终回复为空；请换一种说法或让我直接执行具体诊断。"
 
         # 5. Write assistant reply to memory
         self.memory.add_node(
@@ -329,6 +339,32 @@ class AgentLoop:
         stripped = XML_TOOL_CALL_RE.sub("", stripped)
         stripped = LEGACY_FUNCTION_TOOL_CALL_RE.sub("", stripped)
         return stripped.strip()
+
+    def _fallback_reply_from_tool_observations(self, observations: list[dict[str, Any]]) -> str:
+        """Produce a user-facing reply when the model only emitted tool calls."""
+        if not observations:
+            return ""
+        lines = ["我执行了诊断工具，但模型最终回复为空；这里是工具结果摘要："]
+        for item in observations[-5:]:
+            tool = item.get("tool", "unknown")
+            result = item.get("result")
+            if isinstance(result, dict):
+                if result.get("error"):
+                    summary = f"失败：{result.get('error')}"
+                elif "stdout" in result or "stderr" in result:
+                    stdout = str(result.get("stdout") or "").strip()
+                    stderr = str(result.get("stderr") or "").strip()
+                    returncode = result.get("returncode")
+                    output = stdout or stderr or "无输出"
+                    summary = f"returncode={returncode}，{output[:240]}"
+                elif result.get("ok") is not None:
+                    summary = json.dumps(result, ensure_ascii=False, default=str)[:240]
+                else:
+                    summary = json.dumps(result, ensure_ascii=False, default=str)[:240]
+            else:
+                summary = str(result)[:240]
+            lines.append(f"- {tool}: {summary}")
+        return "\n".join(lines)
 
     # ── Tool execution ────────────────────────────────────────────────
 

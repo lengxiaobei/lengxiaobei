@@ -1,6 +1,7 @@
 from backend.autonomy.agent_loop import AgentLoop
 from backend.autonomy import tools as agent_tools
 from backend.autonomy.tools import register_all, register_dispatcher_tools
+from backend.tools.sandbox import run_readonly
 
 
 class _Memory:
@@ -127,3 +128,22 @@ def test_web_search_falls_back_when_primary_provider_fails(monkeypatch):
     assert result["ok"] is True
     assert result["provider"] == "bing"
     assert "Bing result" in result["results"]
+
+
+def test_readonly_shell_accepts_string_command(tmp_path):
+    result = run_readonly("python3 -c 'print(123)'", cwd=tmp_path)
+
+    assert result["returncode"] == 0
+    assert result["stdout"].strip() == "123"
+
+
+def test_agent_loop_summarizes_tool_results_when_final_reply_is_empty():
+    loop = AgentLoop(memory=_Memory(), tools={})
+
+    reply = loop._fallback_reply_from_tool_observations(
+        [{"tool": "shell_readonly", "result": {"returncode": 0, "stdout": "ok\n", "stderr": ""}}]
+    )
+
+    assert "工具结果摘要" in reply
+    assert "shell_readonly" in reply
+    assert "ok" in reply

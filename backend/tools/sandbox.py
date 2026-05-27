@@ -7,14 +7,22 @@
 from __future__ import annotations
 
 import subprocess
+import shlex
 from pathlib import Path
 
 
 DENY_TOKENS = {"rm", "sudo", "chmod", "chown", "mkfs", "dd"}
 
 
-def run_readonly(command: list[str], cwd: Path, timeout: int = 30) -> dict:
+def _normalize_command(command: list[str] | str) -> list[str]:
+    if isinstance(command, str):
+        return shlex.split(command)
+    return command
+
+
+def run_readonly(command: list[str] | str, cwd: Path, timeout: int = 30) -> dict:
     """运行低风险命令，局部参考 OpenClaw sandbox。"""
+    command = _normalize_command(command)
     if not command:
         raise ValueError("command is required")
     if any(token in DENY_TOKENS for token in command):
@@ -23,8 +31,9 @@ def run_readonly(command: list[str], cwd: Path, timeout: int = 30) -> dict:
     return {"returncode": proc.returncode, "stdout": proc.stdout, "stderr": proc.stderr}
 
 
-def run_project_command(command: list[str], cwd: Path, timeout: int = 60) -> dict:
+def run_project_command(command: list[str] | str, cwd: Path, timeout: int = 60) -> dict:
     """Run an arbitrary command from the project root with a timeout."""
+    command = _normalize_command(command)
     if not command:
         raise ValueError("command is required")
     root = cwd.resolve()
