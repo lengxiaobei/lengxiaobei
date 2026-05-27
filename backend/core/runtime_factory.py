@@ -5,18 +5,30 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
+from backend.agents.local import LocalAgentHub
 from backend.config import get_settings
+from backend.autonomy.agent_loop import AgentLoop, AgentConfig
+from backend.autonomy.tools import register_all as register_agent_tools
+from backend.autonomy.loop import AutonomyEngine
 from backend.core.commander import Commander
 from backend.core.context import RuntimeContext
 from backend.core.dispatcher import Dispatcher
+from backend.core.capability_registry import CapabilityRegistry
+from backend.evolution.burn import BurnEngine
 from backend.evolution.reflector import Reflector
 from backend.evolution.skill_store import SkillStore
 from backend.memory.graph_store import GraphStore
-from backend.memory.sqlite_backend import SQLiteBackend
+from backend.memory.sqlite_backend import SQLiteBackend, SQLiteMemoryBackend
 from backend.memory.sync.manager import SyncManager
 from backend.memory.tree import MemoryTree
+from backend.memory.user_profile import UserProfileManager
 from backend.memory.vector_store import VectorStore
 from backend.tools.registry import ToolRegistry
+from backend.core.llm.router import get_router, ProviderRouter, ProviderConfig, ModelSpec
+from backend.tools.mcp_client import get_mcp_manager, MCPManager, init_mcp
+from backend.memory.hooks import get_memory_hooks, MemoryHooks
+from backend.tools.skills_loader import get_skill_loader, SkillLoader
+from backend.core.session import get_session_manager, SessionManager
 from backend.utils.logger import get_logger
 from backend.utils.task_queue import RuntimeScheduler
 
@@ -29,12 +41,24 @@ def build_runtime(project_root: Path | None = None, data_dir: Path | None = None
     logger = get_logger(logger_name)
 
     sqlite = SQLiteBackend(data / "sqlite" / "agent.db")
-    memory_tree = MemoryTree(sqlite)
+    memory_tree = MemoryTree(sqlite)  # VectorStore wired up below
     vector_store = VectorStore(memory_tree, sqlite=sqlite, persist_dir=str(data / "chroma"))
+    memory_tree.vector_store = vector_store  # Enable hybrid search
     graph_store = GraphStore(sqlite)
     sync_manager = SyncManager(memory_tree, sqlite=sqlite)
     skill_store = SkillStore(data / "skills", sqlite=sqlite)
-    tools = ToolRegistry(root, memory=memory_tree, skill_store=skill_store, vector_store=vector_store)
+    agent_roots = [Path(item).expanduser() for item in getattr(settings, "local_agent_roots", [])]
+    agent_hub = LocalAgentHub(
+        roots=agent_roots or None,
+        config_path=Path(settings.local_agents_config).expanduser(),
+    )
+    tools = ToolRegistry(
+        root,
+        memory=memory_tree,
+        skill_store=skill_store,
+        vector_store=vector_store,
+        agent_hub=agent_hub,
+    )
     dispatcher = Dispatcher(tools=tools, logger=logger, sqlite=sqlite)
     reflector = Reflector(
         project_root=root,
@@ -44,13 +68,74 @@ def build_runtime(project_root: Path | None = None, data_dir: Path | None = None
         skill_store=skill_store,
     )
     tools.bind(reflector=reflector, vector_store=vector_store)
+    burn = BurnEngine(reflector=reflector, skill_store=skill_store, dispatcher=dispatcher, memory=memory_tree, logger=logger, data_dir=data)
+    autonomy = AutonomyEngine(
+        data_dir=data,
+        memory=memory_tree,
+        dispatcher=dispatcher,
+        skill_store=skill_store,
+        logger=logger,
+        idle_check=lambda: time.time() - runtime.last_activity_at if runtime.last_activity_at else None,
+    )
+
+    # ── Agent Loop ────────────────────────────────────────────────────
+    agent_memory = SQLiteMemoryBackend(data / "memory.db")
+    agent_loop_config = AgentConfig(
+        max_turns_per_session=50,
+        recall_limit=12,
+        tool_timeout_seconds=30.0,
+        memory_promotion_interval_seconds=30 * 60,
+        goal_check_interval_seconds=10 * 60,
+        prune_threshold=5000,
+    )
+    agent_loop = AgentLoop(
+        memory=agent_memory,
+        config=agent_loop_config,
+        tools={},  # Tools registered below
+        llm_completer=None,  # Wired after LLM router is ready
+        logger=logger,
+    )
+    # Register all agent tools
+    register_agent_tools(agent_loop)
+
+    # ── LLM Router ─────────────────────────────────────────────────────
+    llm_router = get_router()
+
+    # Wire LLM completer to agent loop (after router is ready)
+    async def _llm_complete(prompt: str, system: str = "", history: list | None = None) -> str:
+        messages: list[dict[str, str]] = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.extend(history or [{"role": "user", "content": prompt}])
+        result = await llm_router.chat(messages)
+        if result.get("error"):
+            return f"模型服务暂时不可用：{result['error']}"
+        return str(result.get("content") or "")
+
+    agent_loop.llm_completer = _llm_complete
+
+    # ── MCP & Hooks ────────────────────────────────────────────────────
+    mcp_manager = get_mcp_manager()
+    memory_hooks = get_memory_hooks(memory_tree=memory_tree, vector_store=vector_store)
+    session_manager = get_session_manager()
+    skill_loader = get_skill_loader(tool_registry=tools)
+
+    # Wire MCP tools into ToolRegistry
+    for tool_name, mcp_tool in mcp_manager.get_tools().items():
+        tools.register(tool_name, lambda _t=mcp_tool, **kw: _t)
 
     scheduler = RuntimeScheduler(logger)
     scheduler.add_interval_job("memory-reindex", 20 * 60, lambda: vector_store.reindex(limit=1000))
     scheduler.add_interval_job("hermes-reflect", 30 * 60, lambda: reflector.reflect("scheduled reflection", force_skill=True))
-    commander = Commander(dispatcher=dispatcher, memory=memory_tree, logger=logger)
+    scheduler.add_interval_job("autonomy-loop", 15 * 60, lambda: autonomy.tick("scheduled autonomy loop"))
+    scheduler.add_interval_job("memory-promotion", 30 * 60, lambda: _run_promotion(memory_hooks, settings))
+    scheduler.add_interval_job("mcp-health", 10 * 60, lambda: _check_mcp(mcp_manager))
+    scheduler.add_interval_job("code-quality-check", 60 * 60, lambda: autonomy.tick("scheduled code quality check", force=True))
+    capability_registry = CapabilityRegistry()
+    user_profile = UserProfileManager(sqlite)
+    commander = Commander(dispatcher=dispatcher, memory=memory_tree, logger=logger, capability_registry=capability_registry, user_profile=user_profile)
 
-    return RuntimeContext(
+    runtime = RuntimeContext(
         project_root=root,
         data_dir=data,
         sqlite=sqlite,
@@ -61,9 +146,40 @@ def build_runtime(project_root: Path | None = None, data_dir: Path | None = None
         tools=tools,
         dispatcher=dispatcher,
         commander=commander,
+        capability_registry=capability_registry,
+        autonomy=autonomy,
         reflector=reflector,
         skill_store=skill_store,
         scheduler=scheduler,
+        burn=burn,
+        llm_router=llm_router,
+        mcp_manager=mcp_manager,
+        memory_hooks=memory_hooks,
+        session_manager=session_manager,
+        skill_loader=skill_loader,
+        agent_loop=agent_loop,
         started_at=time.time(),
         logger=logger,
+        last_activity_at=time.time(),
     )
+    autonomy.emit = runtime.emit
+    return runtime
+
+
+async def _run_promotion(hooks: MemoryHooks, settings: Any) -> None:
+    """Run memory promotion cycle."""
+    try:
+        memory_md = Path(settings.project_root) / "MEMORY.md"
+        await hooks.run_promotion_cycle(str(memory_md))
+    except Exception:
+        pass
+
+
+async def _check_mcp(manager: MCPManager) -> None:
+    """Reconnect any disconnected MCP servers."""
+    try:
+        for name in manager._servers:
+            if not manager.is_connected(name):
+                await manager.connect_server(name)
+    except Exception:
+        pass
