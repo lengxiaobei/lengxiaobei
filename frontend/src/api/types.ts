@@ -7,7 +7,4 @@ export type ApiEnvelope<T> = {
 
 export type ConversationResult = {
   text: string;
-  plan?: unknown;
-  observation?: unknown;
-  recall?: unknown[];
 };

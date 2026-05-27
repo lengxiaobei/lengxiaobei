@@ -8,7 +8,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 
 from backend.api.routes import runtime
-from backend.api.schemas import SkillDraftInput
+from backend.api.schemas import SkillDraftInput, SkillReviewInput
 from backend.evolution.skill_gen import draft_skill
 
 router = APIRouter()
@@ -30,13 +30,35 @@ async def create_skill_draft(payload: SkillDraftInput, rt=Depends(runtime)) -> d
 
 
 @router.post("/{name}/approve")
-async def approve_skill(name: str, rt=Depends(runtime)) -> dict:
-    return {"skill": rt.skill_store.set_status(name, "approved")}
+async def approve_skill(name: str, payload: SkillReviewInput | None = None, rt=Depends(runtime)) -> dict:
+    review = payload or SkillReviewInput()
+    return {
+        "skill": rt.skill_store.review(
+            name,
+            "approved",
+            reviewer=review.reviewer,
+            notes=review.notes,
+            evidence=review.evidence,
+            checks=review.checks,
+            rollback_plan=review.rollback_plan,
+        )
+    }
 
 
 @router.post("/{name}/reject")
-async def reject_skill(name: str, rt=Depends(runtime)) -> dict:
-    return {"skill": rt.skill_store.set_status(name, "rejected")}
+async def reject_skill(name: str, payload: SkillReviewInput | None = None, rt=Depends(runtime)) -> dict:
+    review = payload or SkillReviewInput()
+    return {
+        "skill": rt.skill_store.review(
+            name,
+            "rejected",
+            reviewer=review.reviewer,
+            notes=review.notes,
+            evidence=review.evidence,
+            checks=review.checks,
+            rollback_plan=review.rollback_plan,
+        )
+    }
 
 
 @router.post("/{name}/execute")

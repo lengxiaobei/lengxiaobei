@@ -1,28 +1,55 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { Sidebar } from "./components/Layout/Sidebar";
 import { ChatPage } from "./pages/ChatPage";
-import { EvolutionPage } from "./pages/EvolutionPage";
+import { AutonomyPage } from "./pages/AutonomyPage";
 import { MemoryPage } from "./pages/MemoryPage";
-import { SettingsPage } from "./pages/SettingsPage";
 import { SkillsPage } from "./pages/SkillsPage";
-import { useSystemStore } from "./stores/systemStore";
+import { useSystemStore, type SystemStatus } from "./stores/systemStore";
+import { useWebSocket } from "./hooks/useWebSocket";
 
 export function App() {
-  const { activeTab, refreshStatus } = useSystemStore();
+  const { activeTab, refreshStatus, applyStatus, setWsConnected } = useSystemStore();
+  const hasFetched = useRef(false);
 
+  // Initial fetch on mount
   useEffect(() => {
-    refreshStatus().catch(() => undefined);
-    const id = window.setInterval(() => refreshStatus().catch(() => undefined), 5000);
-    return () => window.clearInterval(id);
+    if (hasFetched.current) return;
+    hasFetched.current = true;
+    refreshStatus().catch(() => {});
   }, [refreshStatus]);
+
+  const onWsMessage = useCallback(
+    (data: unknown) => {
+      const payload = data as Record<string, unknown> | null;
+      if (!payload) return;
+      switch (payload.type) {
+        case "system.connected":
+          setWsConnected(true);
+          if (payload.payload) applyStatus(payload.payload as SystemStatus);
+          break;
+        case "system.status":
+          if (payload.payload) applyStatus(payload.payload as SystemStatus);
+          break;
+      }
+    },
+    [applyStatus, setWsConnected],
+  );
+
+  const { connected } = useWebSocket(onWsMessage);
+
+  // Poll as fallback when WS is disconnected (every 30s instead of 5s)
+  useEffect(() => {
+    if (connected) return;
+    const id = window.setInterval(() => refreshStatus().catch(() => {}), 30_000);
+    return () => window.clearInterval(id);
+  }, [connected, refreshStatus]);
 
   return (
     <Sidebar>
       {activeTab === "chat" && <ChatPage />}
       {activeTab === "memory" && <MemoryPage />}
       {activeTab === "skills" && <SkillsPage />}
-      {activeTab === "evolution" && <EvolutionPage />}
-      {activeTab === "settings" && <SettingsPage />}
+      {activeTab === "autonomy" && <AutonomyPage />}
     </Sidebar>
   );
 }

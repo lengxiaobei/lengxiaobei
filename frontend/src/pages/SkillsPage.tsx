@@ -22,11 +22,11 @@ export function SkillsPage() {
     <section className="page skills-page">
       <header>
         <h1>技能审核</h1>
-        <p>Hermes 风格闭环：轨迹提炼或手动创建技能草稿，默认 pending；审核通过后才能被 Dispatcher 执行。</p>
+        <p>冷小北生成或手动创建的技能先进入待审核队列，通过后才会被工具调度执行。</p>
       </header>
       <div className="split">
         <section>
-          <h2>Review Queue</h2>
+          <h2>待审核技能</h2>
           <div className="list scroll-list">
             {items.length === 0 && <div className="empty">暂无技能草稿</div>}
             {items.map((skill) => (
@@ -35,16 +35,16 @@ export function SkillsPage() {
                 <p>{skill.trigger || String(skill.body?.trigger || "manual")}</p>
                 <small>status: {skill.status} · success: {skill.success_count || 0} · fail: {skill.fail_count || 0}</small>
                 <div className="actions">
-                  <button onClick={() => approve(skill.name)}><Check size={15} /> approve</button>
-                  <button onClick={() => reject(skill.name)}><X size={15} /> reject</button>
-                  <button onClick={async () => setLastResult(await execute(skill.name))}><Play size={15} /> run</button>
+                  <button onClick={() => approve(skill.name)}><Check size={15} /> 通过</button>
+                  <button onClick={() => reject(skill.name)}><X size={15} /> 拒绝</button>
+                  <button onClick={async () => setLastResult(await execute(skill.name))}><Play size={15} /> 运行</button>
                 </div>
               </article>
             ))}
           </div>
         </section>
         <section>
-          <h2>Draft Skill</h2>
+          <h2>新建技能草稿</h2>
           <form className="stack" onSubmit={onDraft}>
             <input value={name} onChange={(event) => setName(event.target.value)} />
             <input value={trigger} onChange={(event) => setTrigger(event.target.value)} />

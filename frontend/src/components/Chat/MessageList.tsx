@@ -1,5 +1,53 @@
+import { Copy, Check } from "lucide-react";
+import { useState, useCallback } from "react";
 import type { ChatMessage } from "../../stores/chatStore";
+import { MarkdownText } from "./MarkdownText";
 
 export function MessageList({ messages }: { messages: ChatMessage[] }) {
-  return <div className="chat-log">{messages.length === 0 && <div className="empty">等待第一条任务</div>}{messages.map((message, index) => <article key={`${message.role}-${index}`} className={`message ${message.role}`}><span>{message.role === "user" ? "你" : "冷小北"}</span><p>{message.text}</p></article>)}</div>;
+  return (
+    <>
+      {messages.length === 0 && (
+        <div className="chat-empty">
+          <strong>等待你的第一条任务指令</strong>
+          <p>可以直接说"巡检通道运行时""反思最近失败""整理我的长期记忆"。</p>
+        </div>
+      )}
+      {messages.map((message) => (
+        <MessageBubble key={message.id} message={message} />
+      ))}
+    </>
+  );
+}
+
+function MessageBubble({ message }: { message: ChatMessage }) {
+  const [copied, setCopied] = useState(false);
+
+  const copyText = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(message.text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // ignore
+    }
+  }, [message.text]);
+
+  return (
+    <article className={`message ${message.role}`}>
+      <div className="message-meta">
+        <span>{message.role === "user" ? "你" : "冷小北"}</span>
+        <time>{new Date(message.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>
+        {message.role === "assistant" && (
+          <button className="copy-btn" onClick={copyText} title="复制" aria-label="复制消息">
+            {copied ? <Check size={13} /> : <Copy size={13} />}
+          </button>
+        )}
+      </div>
+      {message.role === "assistant" ? (
+        <MarkdownText text={message.text} />
+      ) : (
+        <p>{message.text}</p>
+      )}
+    </article>
+  );
 }

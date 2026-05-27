@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 
-@dataclass(slots=True)
+@dataclass
 class ConversationMessage:
     id: str
     role: Literal["user", "assistant", "system"]

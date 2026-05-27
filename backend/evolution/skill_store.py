@@ -7,9 +7,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
+import time
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 class SkillStore:
@@ -22,8 +26,14 @@ class SkillStore:
 
     def save(self, skill: dict[str, Any]) -> Path:
         """保存 pending 技能草稿，局部参考 Hermes skill_store。"""
+        import time
+
         name = self._safe_name(str(skill.get("name") or "skill"))
+        skill = dict(skill)
+        now = time.time()
         skill["name"] = name
+        skill.setdefault("created_at", now)
+        skill["updated_at"] = now
         path = self.skills_dir / f"{name}.yaml"
         body = "# Reference: Hermes skill-store; pending by default for human review\n"
         body += json.dumps(skill, ensure_ascii=False, indent=2)
@@ -54,19 +64,44 @@ class SkillStore:
         text = "\n".join(line for line in path.read_text(encoding="utf-8", errors="replace").splitlines() if not line.startswith("#"))
         try:
             return json.loads(text)
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            logger.warning("Failed to parse skill file %s: %s", name, e)
             return {"name": safe, "status": self._status(path), "raw": text}
 
     def set_status(self, name: str, status: str) -> dict[str, Any] | None:
+        return self.review(name=name, status=status)
+
+    def review(
+        self,
+        name: str,
+        status: str,
+        *,
+        reviewer: str = "human",
+        notes: str | None = None,
+        evidence: list[str] | None = None,
+        checks: dict[str, Any] | None = None,
+        rollback_plan: str | None = None,
+    ) -> dict[str, Any] | None:
         safe = self._safe_name(name)
         skill = self.load(safe)
         if not skill:
             return None
         skill["status"] = status
+        review = {
+            "status": status,
+            "reviewer": reviewer or "human",
+            "notes": notes,
+            "evidence": list(evidence or []),
+            "checks": dict(checks or {}),
+            "rollback_plan": rollback_plan,
+            "reviewed_at": time.time(),
+        }
+        history = list(skill.get("review_history") or [])
+        history.append(review)
+        skill["review_history"] = history
+        skill["latest_review"] = review
         self.save(skill)
-        if self.sqlite:
-            return self.sqlite.update_skill_status(safe, status)
-        return skill
+        return self.load(safe)
 
     def record_result(self, name: str, ok: bool) -> None:
         if self.sqlite:

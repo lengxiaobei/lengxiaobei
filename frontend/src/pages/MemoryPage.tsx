@@ -33,7 +33,7 @@ export function MemoryPage() {
     <section className="page memory-page">
       <header>
         <h1>记忆树</h1>
-        <p>OpenHuman 风格的本地可编辑记忆树：节点 CRUD、树查询、搜索、同步导入和图谱边都走后端真实 API。</p>
+        <p>冷小北自己的长期记忆：搜索、写入、导入资料都在这里完成。</p>
       </header>
       <div className="split">
         <section>
@@ -55,10 +55,10 @@ export function MemoryPage() {
           </div>
         </section>
         <section>
-          <h2><Plus size={16} /> 新增 / 同步导入</h2>
+          <h2><Plus size={16} /> 写入 / 导入</h2>
           <form className="stack" onSubmit={onAdd}>
             <textarea value={content} onChange={(event) => setContent(event.target.value)} placeholder="写入一条知识，或粘贴要同步导入的 HTML/文本" />
-            <button><Plus size={16} /> 写入 knowledge 节点</button>
+            <button><Plus size={16} /> 写入记忆</button>
           </form>
           <form className="stack" onSubmit={onImport}>
             <input value={service} onChange={(event) => setService(event.target.value)} placeholder="同步源名称，如 gmail/notion/manual" />

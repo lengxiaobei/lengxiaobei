@@ -26,6 +26,14 @@ class SkillDraftInput(BaseModel):
     steps: list[str] | str = Field(default_factory=list)
 
 
+class SkillReviewInput(BaseModel):
+    reviewer: str = "human"
+    notes: str | None = None
+    evidence: list[str] = Field(default_factory=list)
+    checks: dict[str, Any] = Field(default_factory=dict)
+    rollback_plan: str | None = None
+
+
 class ApiStatus(BaseModel):
     status: Literal["success", "failed", "ok", "running", "healthy"]
     error: str | None = None

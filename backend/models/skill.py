@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 
-@dataclass(slots=True)
+@dataclass
 class SkillRecord:
     name: str
     status: Literal["pending", "approved", "rejected"] = "pending"
