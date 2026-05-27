@@ -1,0 +1,11 @@
+{
+  "agents": [
+    {
+      "id": "codex-local",
+      "name": "Codex Local",
+      "root": "~/.codex",
+      "description": "Example local agent adapter. Copy this file to data/local_agents.json and edit it.",
+      "command": ["codex", "exec", "{prompt}"]
+    }
+  ]
+}
