@@ -109,8 +109,12 @@ def build_runtime(project_root: Path | None = None, data_dir: Path | None = None
         messages.extend(history or [{"role": "user", "content": prompt}])
         result = await llm_router.chat(messages)
         if result.get("error"):
-            return f"模型服务暂时不可用：{result['error']}"
-        return str(result.get("content") or "")
+            # Raise instead of returning error text — let _call_llm catch it
+            raise RuntimeError(f"LLM router error: {result['error']}")
+        content = str(result.get("content") or "")
+        if not content:
+            raise RuntimeError("LLM returned empty content")
+        return content
 
     agent_loop.llm_completer = _llm_complete
 

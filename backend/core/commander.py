@@ -411,8 +411,13 @@ class Commander:
         """Route through the Agent Loop for multi-turn tool-calling."""
         try:
             result = await self.agent_loop.handle(text, channel=channel)
+            # Check if the reply is an error message from LLM failure
+            reply_text = result.reply or ""
+            if "模型接口已连通" in reply_text or "LLM router error" in reply_text or not reply_text:
+                # Agent Loop failed to get a real LLM response — fall back
+                raise RuntimeError(f"Agent loop returned error-like reply: {reply_text[:200]}")
             return {
-                "text": result.reply,
+                "text": reply_text,
                 "plan": {"intent": "agent_loop", "tool": None, "args": {}, "reason": "multi-turn agent loop"},
                 "observation": None,
                 "recall": [],
