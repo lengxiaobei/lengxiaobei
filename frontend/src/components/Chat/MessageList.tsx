@@ -9,7 +9,7 @@ export function MessageList({ messages }: { messages: ChatMessage[] }) {
       {messages.length === 0 && (
         <div className="chat-empty">
           <strong>等待你的第一条任务指令</strong>
-          <p>可以直接说"巡检通道运行时""反思最近失败""整理我的长期记忆"。</p>
+          <p>可以直接说"检查冷小北现在能做什么""复盘最近一次失败并给出修复动作""找一个最小改进点并自己验证"。</p>
         </div>
       )}
       {messages.map((message) => (

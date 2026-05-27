@@ -6,7 +6,12 @@ import { MessageList } from "../components/Chat/MessageList";
 import { useChatStore } from "../stores/chatStore";
 import { useSystemStore } from "../stores/systemStore";
 
-const suggestions = ["巡检通道运行时", "反思最近失败", "整理我的长期记忆", "总结冷小北能力状态"];
+const suggestions = [
+  "检查冷小北现在能做什么",
+  "复盘最近一次失败并给出修复动作",
+  "把这段对话整理进长期记忆",
+  "找一个最小改进点并自己验证"
+];
 
 export function ChatPage() {
   const { messages, sending, send, clear } = useChatStore();
