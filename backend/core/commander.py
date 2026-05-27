@@ -89,6 +89,8 @@ class Commander:
             reply = self._model_info_reply()
         elif plan.intent == "gateway_restart":
             reply = self._gateway_restart_reply()
+        elif plan.intent == "code_modification":
+            reply = self._code_modification_reply(text, observation)
         else:
             system = self._system_prompt(recall)
             reply = await ollama_chat(text, system=system)
@@ -125,6 +127,10 @@ class Commander:
         for intent, tool, reason, check_fn in self._INTENT_TABLE:
             if check_fn(compact, norm):
                 return TaskPlan(intent, tool, {}, reason)
+
+        # Code modification intent
+        if self._is_code_modification_request(compact, norm):
+            return TaskPlan("code_modification", "code_engineer", {"task": text}, "用户要求修改项目源码")
 
         # Compound intents that need extra args
         if self._is_controlled_agent_assignment(compact, norm):
@@ -192,6 +198,48 @@ class Commander:
         if "openhuman" in compact:
             return "openhuman"
         return "auto"
+
+    def _is_code_modification_request(self, compact: str, norm: str) -> bool:
+        """Detect requests to modify project source code."""
+        # Explicit code engineering requests (strongest signal)
+        explicit = any(kw in compact for kw in {
+            "帮我改", "帮我修", "帮我写", "帮我添加", "帮我删", "帮我重构",
+            "改一下", "修一下", "写一下", "添加一下",
+            "改这个", "修这个", "写这个",
+        })
+        if explicit:
+            return True
+
+        # Keywords indicating code changes
+        code_actions = {
+            "改", "修改", "修复", "fix", "patch", "重构", "refactor",
+            "优化", "optimize", "改进", "improve",
+            "添加", "add", "增加", "append", "插入", "insert",
+            "删除", "remove", "删掉", "去掉",
+            "更新", "update", "升级", "upgrade",
+            "实现", "implement", "写", "write",
+        }
+        has_action = any(kw in compact for kw in code_actions)
+
+        # Code-related nouns or file paths
+        code_targets = {
+            "代码", "源码", "程序", "script",
+            "文件", "file", ".py", ".ts", ".tsx", ".js", ".jsx", ".css", ".html", ".md",
+            "函数", "function", "fn",
+            "类", "class",
+            "方法", "method",
+            "module", "模块", "mod",
+            "组件", "component",
+            "页面", "page",
+            "路由", "route",
+            "接口", "api", "endpoint",
+            "配置", "config",
+            "bug", "错误", "error", "问题", "issue",
+            "测试", "test",
+        }
+        has_target = any(kw in compact for kw in code_targets)
+
+        return has_action and has_target
 
     # ------------------------------------------------------------------
     # Recall / prompt helpers
@@ -313,6 +361,27 @@ class Commander:
             f"我现在按 LengXiaobei / YourAgent 新架构运行。"
             f"配置的 LLM provider 是 {settings.llm_provider}，模型是 {settings.llm_model}，"
             f"base URL 是 {settings.llm_base_url}。{adapter_status}。"
+        )
+
+    def _code_modification_reply(self, text: str, observation: dict[str, Any] | None) -> str:
+        """Summarize the result of a code engineering task."""
+        if not observation or not observation.get("ok"):
+            error = (observation or {}).get("summary", "代码修改任务未能完成")
+            return f"代码修改任务遇到问题：{error}。我会把这次尝试记录到记忆里，供后续分析。"
+        iterations = observation.get("iterations", [])
+        if not iterations:
+            return "代码修改任务已提交，但还没有返回详细结果。"
+        last = iterations[-1]
+        if last.get("ok"):
+            steps = len(last.get("plan", []))
+            return (
+                f"代码修改已完成，共执行 {len(iterations)} 轮迭代，"
+                f"最后一步包含 {steps} 个操作。"
+                f"验证结果：通过。"
+            )
+        return (
+            f"代码修改尝试了 {len(iterations)} 轮仍未完全成功。"
+            f"最后验证错误：{last.get('verification', {}).get('error', 'unknown')}"
         )
 
     def _gateway_restart_reply(self) -> str:
