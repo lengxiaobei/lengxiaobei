@@ -43,8 +43,8 @@ def search_files(pattern: str, path: str = ".", root: Path | None = None) -> dic
 
     if cmd_name == "rg":
         cmd = [
-            str(cmd_path), "-n", "--color=never", "--max-count", "50",
-            "--type-not", "binary", "-g", "!*.lock", "-g", "!node_modules", "-g", "!__pycache__",
+            str(cmd_path), "-n", "--with-filename", "--color=never", "--max-count", "50",
+            "-g", "!*.lock", "-g", "!node_modules", "-g", "!__pycache__",
             pattern, str(target),
         ]
     else:

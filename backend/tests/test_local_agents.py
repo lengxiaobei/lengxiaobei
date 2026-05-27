@@ -74,7 +74,7 @@ def test_controlled_agents_are_available(tmp_path: Path):
     assert agents[2]["callable"] is True
 
 
-def test_assign_task_to_openhuman_writes_state(tmp_path: Path):
+def test_assign_task_to_memory_lane_records_compat_task(tmp_path: Path):
     openhuman = tmp_path / ".openhuman"
     user_dir = openhuman / "users" / "user-1"
     user_dir.mkdir(parents=True)
@@ -85,10 +85,12 @@ def test_assign_task_to_openhuman_writes_state(tmp_path: Path):
 
     assert result["ok"] is True
     assert result["target"]["id"] == "openhuman"
-    state_path = user_dir / "lengxiaobei_tasks.json"
-    assert state_path.exists()
-    tasks = json.loads(state_path.read_text())["tasks"]
-    assert tasks[0]["task"] == "sync my personal memory"
+    task_files = list((tmp_path / "agent_tasks").glob("*-openhuman.json"))
+    assert len(task_files) == 1
+    task = json.loads(task_files[0].read_text())
+    assert task["agent_id"] == "openhuman"
+    assert task["agent_name"] == "记忆连续性"
+    assert task["result"]["ok"] is True
 
 
 def test_controlled_agent_tools_are_registered(tmp_path: Path):

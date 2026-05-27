@@ -88,10 +88,10 @@ class SQLiteMemoryBackend:
                 replace=True,
             )
             self.db["nodes"].transform(drop={"id"})  # auto-increment
-            self.db["nodes"].execute(
+            self.db.execute(
                 "CREATE INDEX IF NOT EXISTS idx_nodes_type ON nodes(node_type)"
             )
-            self.db["nodes"].execute(
+            self.db.execute(
                 "CREATE INDEX IF NOT EXISTS idx_nodes_created ON nodes(created_at)"
             )
 

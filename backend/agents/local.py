@@ -121,11 +121,16 @@ class LocalAgentHub:
     def run_agent(self, agent_id: str, prompt: str, timeout: int = 120, execute: bool = True) -> dict[str, Any]:
         integration = self._integration(agent_id)
         if integration:
-            return integration.assign_task(prompt, timeout=timeout) if execute else self._write_task(
-                agent=self._controlled_agent(agent_id),
-                prompt=prompt,
-                mode="queued",
-            )
+            if not execute:
+                return self._write_task(
+                    agent=self._controlled_agent(agent_id),
+                    prompt=prompt,
+                    mode="queued",
+                )
+            result = integration.assign_task(prompt, timeout=timeout)
+            if inspect.isawaitable(result):
+                return self._run_awaitable_in_thread(result)
+            return result
         agent = self._find(agent_id) or self._controlled_agent(agent_id)
         if not agent:
             return {"ok": False, "error": f"local agent not found: {agent_id}"}
@@ -168,6 +173,8 @@ class LocalAgentHub:
             if integration and execute
             else self.run_agent(agent.id, prompt, timeout=timeout, execute=execute)
         )
+        if inspect.isawaitable(result):
+            result = self._run_awaitable_in_thread(result)
         assignment = self._write_task(
             agent=agent,
             prompt=prompt,

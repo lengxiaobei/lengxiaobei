@@ -66,30 +66,30 @@ def test_reference_gap_question_has_deterministic_answer():
     reply = commander._reference_gap_reply()
 
     assert plan.intent == "reference_gap"
-    assert "OpenClaw 方向还缺" in reply
-    assert "OpenHuman 方向还缺" in reply
-    assert "Hermes 方向还缺" in reply
+    assert "能力类型" in reply
+    assert "不是接入或遥控它们" in reply
+    assert "通道与工具方向还缺" in reply
+    assert "记忆连续性方向还缺" in reply
+    assert "反思与技能方向还缺" in reply
     assert "审核型 patch/write 工具" in reply
 
 
-def test_reference_agent_connect_routes_to_controlled_list():
+def test_reference_agent_connect_does_not_route_to_external_control():
     commander = Commander(dispatcher=None, memory=None, logger=None)
 
     plan = commander._plan("把我本地的 OpenClaw、Hermes、OpenHuman 接入 lengxiaobei")
 
-    assert plan.intent == "controlled_agents"
-    assert plan.tool == "controlled_agent_list"
+    assert plan.intent == "chat"
+    assert plan.tool is None
 
 
-def test_reference_agent_assignment_routes_to_target():
+def test_reference_agent_assignment_stays_native():
     commander = Commander(dispatcher=None, memory=None, logger=None)
 
     plan = commander._plan("让 Hermes 反思最近失败的技能生成任务")
 
-    assert plan.intent == "controlled_agent_assign"
-    assert plan.tool == "controlled_agent_assign"
-    assert plan.args["target"] == "hermes"
-    assert plan.args["execute"] is True
+    assert plan.intent == "reference_gap"
+    assert plan.tool is None
 
 
 def test_gateway_restart_request_is_deterministic():
