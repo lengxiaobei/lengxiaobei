@@ -112,7 +112,6 @@ class AgentLoop:
         self._session_started_at: float = time.time()
         self._last_activity_at: float = time.time()
         self._active_goals: list[dict[str, Any]] = []
-        self._lock = asyncio.Lock()
 
         # Background tasks
         self._bg_tasks: list[asyncio.Task] = []
@@ -261,6 +260,8 @@ class AgentLoop:
             "不要只解释原因。必须至少执行一次诊断工具，例如 code_quality、code_search、"
             "filesystem_read、shell_exec 或 list_files；如果定位到明确源码问题，优先用 "
             "filesystem_edit 精确修复，然后用 shell_exec 或 code_quality 验证。\n\n"
+            "当用户询问联网、搜索、网上资料、当前信息或 web 能力是否可用时，必须调用 "
+            "web_search 做一次小查询来实测，再根据工具结果回答。\n\n"
             f"{recall_text}\n"
             "回答要简洁、直接、有主见。中文优先。"
         )

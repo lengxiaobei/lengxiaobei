@@ -161,3 +161,27 @@ def test_tool_call_markup_is_not_exposed():
 
     assert "<tool_call>" not in reply
     assert "shell_exec" not in reply
+
+
+def test_memory_search_summary_does_not_expose_embeddings():
+    commander = Commander(dispatcher=None, memory=None, logger=None)
+
+    reply = commander._summarize_tool_result(
+        "搜索记忆",
+        {
+            "ok": True,
+            "tool": "memory_search",
+            "result": [
+                {
+                    "type": "conversation",
+                    "summary": "你的联网能力现在能用吗",
+                    "embedding": [0.1, 0.2],
+                    "vector_backend": "hash",
+                }
+            ],
+        },
+    )
+
+    assert "你的联网能力现在能用吗" in reply
+    assert "embedding" not in reply
+    assert "vector_backend" not in reply

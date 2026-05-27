@@ -510,7 +510,7 @@ class Commander:
         return summary + "\n\n建议下一步：\n" + "\n".join(f"- {item}" for item in actions[:4])
 
     def _summarize_tool_result(self, text: str, observation: dict[str, Any]) -> str:
-        """把 OpenClaw observation 转成人类可读回复。"""
+        """Turn tool observations into chat-safe, human-readable replies."""
         if not observation.get("ok"):
             return f"执行失败：{observation.get('error', 'unknown error')}"
         if observation.get("tool") == "local_agent_list":
@@ -544,7 +544,20 @@ class Commander:
                 return f"已把任务投递给 {target}。它会进入本地任务队列继续处理，我会保留这次巡检记录。"
             error = direct_result.get("error") or "任务投递没有完成"
             return f"{target} 暂时没有接住任务：{error}"
-        return f"已处理：{text}\n\n结果：{observation.get('result')}"
+        if observation.get("tool") == "memory_search":
+            results = observation.get("result") or []
+            if not results:
+                return "我查了长期记忆，没有找到相关内容。"
+            lines = []
+            for item in results[:5]:
+                summary = item.get("summary") or item.get("content") or ""
+                node_type = item.get("type") or item.get("node_type") or "memory"
+                lines.append(f"- [{node_type}] {str(summary).strip()[:180]}")
+            return "我查到这些相关记忆：\n" + "\n".join(lines)
+        result = observation.get("result")
+        if isinstance(result, str) and result.strip():
+            return f"已处理：{text}\n\n结果：{result}"
+        return f"已处理：{text}"
 
     def _sanitize_assistant_reply(self, reply: str, user_text: str) -> str:
         """Prevent raw tool-call markup from leaking into the chat UI."""

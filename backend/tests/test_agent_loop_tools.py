@@ -66,3 +66,13 @@ def test_agent_loop_prompt_requires_diagnostics_for_repair_requests():
     assert "修复类请求的硬要求" in prompt
     assert "code_quality" in prompt
     assert "不要只解释原因" in prompt
+
+
+def test_agent_loop_prompt_requires_web_search_for_network_questions():
+    loop = AgentLoop(memory=_Memory(), tools={})
+
+    prompt = loop._build_system_prompt([])
+
+    assert "联网" in prompt
+    assert "web_search" in prompt
+    assert "实测" in prompt

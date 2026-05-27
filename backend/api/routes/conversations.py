@@ -1,7 +1,7 @@
 """Conversation API.
 
 参考来源：OpenClaw 将所有渠道消息规范化为 conversation input，再交由 Commander 处理。
-增强：集成 memory hooks 自动注入相关记忆上下文。
+记忆召回由 Commander/AgentLoop 注入系统上下文，不能拼进用户原文。
 """
 
 from __future__ import annotations
@@ -20,13 +20,11 @@ router = APIRouter()
 async def create_message(payload: ConversationInput, rt=Depends(runtime)) -> dict:
     rt.touch_activity(source=payload.channel)
 
-    # Auto-recall: inject relevant memories into context
-    extra_context = ""
+    # Warm memory recall caches, but never prepend recall text to the user's
+    # message. Doing so pollutes intent routing and can leak raw memory results.
     if rt.memory_hooks:
         try:
-            recalls = await rt.memory_hooks.auto_recall(payload.message.strip())
-            if recalls:
-                extra_context = rt.memory_hooks.format_recall_context(recalls)
+            await rt.memory_hooks.auto_recall(payload.message.strip())
         except Exception:
             pass
 
@@ -45,12 +43,7 @@ async def create_message(payload: ConversationInput, rt=Depends(runtime)) -> dic
         except Exception:
             pass
 
-    # Combine context
-    full_message = payload.message.strip()
-    if extra_context:
-        full_message = f"{extra_context}\n\n{full_message}"
-
-    result = await rt.commander.handle_message(full_message, channel=payload.channel)
+    result = await rt.commander.handle_message(payload.message.strip(), channel=payload.channel)
 
     # Store assistant response in session
     if rt.session_manager:
