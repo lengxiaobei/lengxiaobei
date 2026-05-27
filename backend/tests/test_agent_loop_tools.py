@@ -1,4 +1,5 @@
 from backend.autonomy.agent_loop import AgentLoop
+from backend.autonomy import tools as agent_tools
 from backend.autonomy.tools import register_all, register_dispatcher_tools
 
 
@@ -109,3 +110,20 @@ def test_agent_loop_prompt_requires_web_search_for_network_questions():
     assert "联网" in prompt
     assert "web_search" in prompt
     assert "实测" in prompt
+
+
+def test_web_search_falls_back_when_primary_provider_fails(monkeypatch):
+    import asyncio
+
+    def fail(_query):
+        raise ConnectionResetError("reset")
+
+    monkeypatch.setattr(agent_tools, "_search_gpto", fail)
+    monkeypatch.setattr(agent_tools, "_search_bing_html", lambda _query: ["Bing result https://example.com"])
+    monkeypatch.setattr(agent_tools, "_search_duckduckgo_html", lambda _query: [])
+
+    result = asyncio.run(agent_tools.web_search({"query": "test"}))
+
+    assert result["ok"] is True
+    assert result["provider"] == "bing"
+    assert "Bing result" in result["results"]

@@ -7,9 +7,11 @@ Registered with AgentLoop.register_tool(name, fn).
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import urllib.parse
 import urllib.request
+from html import unescape
 from pathlib import Path
 from typing import Any
 
@@ -100,20 +102,87 @@ async def web_search(args: dict[str, Any]) -> dict[str, Any]:
     query = args.get("query", "")
     if not query:
         return {"error": "query required"}
-    try:
-        import urllib.request, json
-        q = query.replace("\"", "").replace("'", "")
-        url = f"https://search.gpto.ai/api/v1/search?query={urllib.parse.quote(q)}&count=5"
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            data = json.loads(resp.read())
-        results = data.get("results", data) if isinstance(data, dict) else data
-        if isinstance(results, list):
-            lines = [f"{i+1}. {r.get('title', r.get('snippet', ''))[:100]}" for i, r in enumerate(results[:5])]
-            return {"ok": True, "results": "\n".join(lines)}
-        return {"ok": True, "results": str(results)[:500]}
-    except Exception as exc:
-        return {"error": f"web search failed: {exc}"}
+    q = query.replace("\"", "").replace("'", "")
+    errors: list[str] = []
+
+    for provider, searcher in (
+        ("gpto", _search_gpto),
+        ("bing", _search_bing_html),
+        ("duckduckgo", _search_duckduckgo_html),
+    ):
+        try:
+            results = searcher(q)
+            if results:
+                return {
+                    "ok": True,
+                    "provider": provider,
+                    "results": "\n".join(f"{i + 1}. {item}" for i, item in enumerate(results[:5])),
+                }
+            errors.append(f"{provider}: no results")
+        except Exception as exc:
+            errors.append(f"{provider}: {exc}")
+    return {"ok": False, "error": "web search failed; " + "; ".join(errors)}
+
+
+def _http_get_text(url: str, timeout: int = 10) -> str:
+    req = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return resp.read().decode("utf-8", errors="ignore")
+
+
+def _search_gpto(query: str) -> list[str]:
+    url = f"https://search.gpto.ai/api/v1/search?query={urllib.parse.quote(query)}&count=5"
+    data = json.loads(_http_get_text(url))
+    results = data.get("results", data) if isinstance(data, dict) else data
+    if not isinstance(results, list):
+        return [str(results)[:160]] if results else []
+    items: list[str] = []
+    for item in results[:5]:
+        if isinstance(item, dict):
+            title = str(item.get("title") or item.get("snippet") or item.get("url") or "").strip()
+            url = str(item.get("url") or item.get("link") or "").strip()
+            if title:
+                items.append(f"{title[:120]} {url}".strip())
+    return items
+
+
+def _search_bing_html(query: str) -> list[str]:
+    url = f"https://www.bing.com/search?q={urllib.parse.quote(query)}"
+    html = _http_get_text(url)
+    items: list[str] = []
+    for match in re.finditer(r'<li class="b_algo".*?<h2[^>]*>.*?<a[^>]*href="([^"]+)"[^>]*>(.*?)</a>', html, re.S):
+        link = unescape(match.group(1))
+        title = _strip_html(match.group(2))
+        if title:
+            items.append(f"{title[:120]} {link}".strip())
+        if len(items) >= 5:
+            break
+    return items
+
+
+def _search_duckduckgo_html(query: str) -> list[str]:
+    url = f"https://duckduckgo.com/html/?q={urllib.parse.quote(query)}"
+    html = _http_get_text(url)
+    items: list[str] = []
+    for match in re.finditer(r'class="result__a"[^>]*href="([^"]+)".*?>(.*?)</a>', html, re.S):
+        link = unescape(match.group(1))
+        title = _strip_html(match.group(2))
+        if title:
+            items.append(f"{title[:120]} {link}".strip())
+        if len(items) >= 5:
+            break
+    return items
+
+
+def _strip_html(value: str) -> str:
+    text = re.sub(r"<.*?>", "", value, flags=re.S)
+    return unescape(re.sub(r"\s+", " ", text)).strip()
 
 
 # ── Memory tools ──────────────────────────────────────────────────────
