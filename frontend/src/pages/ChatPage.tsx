@@ -32,7 +32,13 @@ export function ChatPage() {
       </header>
       <div className="home-status">
         <StatusTile icon={<PlugZap size={18} />} label="连接" value={wsConnected ? "实时在线" : status?.status === "running" ? "HTTP 在线" : "连接中"} tone={wsConnected ? "ok" : "warn"} />
-        <StatusTile icon={<BrainCircuit size={18} />} label="模型" value={status?.model?.model || "未配置"} detail={status?.model?.api_key_configured ? status.model.provider : "缺少 API Key"} tone={status?.model?.api_key_configured ? "ok" : "bad"} />
+        <StatusTile
+          icon={<BrainCircuit size={18} />}
+          label="模型"
+          value={status?.model?.model || "读取中"}
+          detail={status?.model ? (status.model.api_key_configured ? status.model.provider : "缺少 API Key") : "等待后端状态"}
+          tone={status?.model ? (status.model.api_key_configured ? "ok" : "bad") : "neutral"}
+        />
         <StatusTile icon={<Database size={18} />} label="自治" value={String(status?.autonomy?.last_goal || "待运行")} detail={status?.autonomy?.run_count ? `${status.autonomy.run_count} 轮` : "尚无记录"} tone="neutral" />
       </div>
       <div className="chat-log" ref={logRef}>
