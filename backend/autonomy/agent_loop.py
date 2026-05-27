@@ -60,6 +60,16 @@ TOOL_RESULT_TEMPLATE = (
 
 
 @dataclass
+class ToolSpec:
+    """Model-facing metadata for one runtime tool."""
+
+    name: str
+    description: str = ""
+    category: str = "general"
+    input_schema: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class TurnResult:
     """Result of a single agent loop run (may involve multiple tool calls)."""
 
@@ -104,6 +114,7 @@ class AgentLoop:
         self.memory = memory or SQLiteMemoryBackend()
         self.config = config or AgentConfig()
         self.tools = tools or {}
+        self.tool_specs: dict[str, ToolSpec] = {}
         self.llm_completer = llm_completer
         self.logger = logger or self._make_logger()
 
@@ -243,6 +254,9 @@ class AgentLoop:
         return (
             "你是冷小北，运行在 LengXiaobei 本地优先智能体框架中。\n"
             "你拥有长期记忆，可以读写项目文件，执行命令，搜索代码，修改源码。\n\n"
+            "设计原则参考 OpenClaw 的动态工具运行时：工具是运行时提供的能力契约，"
+            "不是 Commander 写死的菜单。遇到不确定、需要验证、需要行动的请求时，"
+            "你应该先查看可用工具，再自己选择最小必要工具链完成任务。\n\n"
             "## 可用工具\n\n"
             "你可以通过以下格式调用工具：\n\n"
             '<tool name="工具名">\n'
@@ -268,16 +282,25 @@ class AgentLoop:
 
     def _tool_descriptions(self) -> str:
         """Generate tool documentation for the system prompt."""
-        docs = []
+        by_category: dict[str, list[str]] = {}
         for name in sorted(self.tools):
-            # Try to get docstring from the tool function
-            fn = self.tools[name]
-            doc = (fn.__doc__ or "").strip().split("\n")[0]
-            if doc:
-                docs.append(f"- **{name}**: {doc}")
+            spec = self.tool_specs.get(name)
+            if spec:
+                description = spec.description
+                schema = f" 参数: {json.dumps(spec.input_schema, ensure_ascii=False)}" if spec.input_schema else ""
+                line = f"- **{name}**: {description}{schema}".strip()
+                category = spec.category
             else:
-                docs.append(f"- **{name}**")
-        return "\n".join(docs)
+                fn = self.tools[name]
+                doc = (fn.__doc__ or "").strip().split("\n")[0]
+                line = f"- **{name}**: {doc}" if doc else f"- **{name}**"
+                category = "general"
+            by_category.setdefault(category, []).append(line)
+        sections = []
+        for category in sorted(by_category):
+            sections.append(f"### {category}")
+            sections.extend(by_category[category])
+        return "\n".join(sections)
 
     # ── Tool call parsing (model-agnostic) ───────────────────────────
 
@@ -457,8 +480,25 @@ class AgentLoop:
 
     # ── Utilities ─────────────────────────────────────────────────────
 
-    def register_tool(self, name: str, fn: Any) -> None:
+    def register_tool(
+        self,
+        name: str,
+        fn: Any,
+        *,
+        description: str | None = None,
+        category: str = "general",
+        input_schema: dict[str, Any] | None = None,
+    ) -> None:
         self.tools[name] = fn
+        doc = description
+        if doc is None:
+            doc = (getattr(fn, "__doc__", "") or "").strip().split("\n")[0]
+        self.tool_specs[name] = ToolSpec(
+            name=name,
+            description=doc or "",
+            category=category,
+            input_schema=input_schema or {},
+        )
 
     @staticmethod
     def _make_logger() -> Any:

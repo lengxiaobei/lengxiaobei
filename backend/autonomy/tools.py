@@ -254,21 +254,52 @@ async def list_files(args: dict[str, Any]) -> dict[str, Any]:
 def register_all(agent_loop: Any) -> None:
     """Register all tools with the agent loop."""
     tools = [
-        ("filesystem_write", filesystem_write),
-        ("filesystem_read", filesystem_read),
-        ("filesystem_edit", filesystem_edit),
-        ("filesystem_delete", filesystem_delete),
-        ("shell_exec", shell_exec),
-        ("code_search", code_search),
-        ("list_files", list_files),
-        ("web_search", web_search),
-        ("memory_search", memory_search),
-        ("memory_recall", memory_recall),
-        ("system_status", system_status),
-        ("code_quality", code_quality),
-        ("reflect", reflect),
-        ("goals", goals),
-        ("skill_list", skill_list),
+        ("filesystem_write", filesystem_write, "filesystem", {"path": "str", "content": "str"}),
+        ("filesystem_read", filesystem_read, "filesystem", {"path": "str"}),
+        ("filesystem_edit", filesystem_edit, "filesystem", {"path": "str", "old_string": "str", "new_string": "str"}),
+        ("filesystem_delete", filesystem_delete, "filesystem", {"path": "str"}),
+        ("shell_exec", shell_exec, "execution", {"command": "str"}),
+        ("code_search", code_search, "code", {"pattern": "str", "path": "str optional"}),
+        ("list_files", list_files, "code", {"path": "str optional", "recursive": "bool optional"}),
+        ("web_search", web_search, "web", {"query": "str"}),
+        ("memory_search", memory_search, "memory", {"query": "str"}),
+        ("memory_recall", memory_recall, "memory", {"limit": "int optional"}),
+        ("system_status", system_status, "runtime", {}),
+        ("code_quality", code_quality, "code", {}),
+        ("reflect", reflect, "reflection", {"topic": "str optional"}),
+        ("goals", goals, "planning", {}),
+        ("skill_list", skill_list, "skills", {}),
     ]
-    for name, fn in tools:
-        agent_loop.register_tool(name, fn)
+    for name, fn, category, schema in tools:
+        agent_loop.register_tool(name, fn, category=category, input_schema=schema)
+
+
+def register_dispatcher_tools(agent_loop: Any, dispatcher: Any, tool_registry: Any) -> None:
+    """Expose ToolRegistry entries to AgentLoop through the Dispatcher.
+
+    This follows OpenClaw's runtime tool-set idea: the loop should discover tools
+    from the active runtime instead of depending only on a hand-maintained list.
+    Builtin AgentLoop tools keep precedence so their argument shape stays stable.
+    """
+    if not dispatcher or not tool_registry:
+        return
+
+    async def _dispatch(name: str, args: dict[str, Any]) -> dict[str, Any]:
+        return await dispatcher.dispatch(name, args or {})
+
+    for item in tool_registry.describe():
+        name = str(item.get("name") or "")
+        if not name or name in agent_loop.tools:
+            continue
+        if name.startswith("controlled_agent_"):
+            continue
+
+        async def _tool(args: dict[str, Any], _name: str = name) -> dict[str, Any]:
+            return await _dispatch(_name, args)
+
+        agent_loop.register_tool(
+            name,
+            _tool,
+            description=f"Runtime ToolRegistry tool: {item.get('callable') or name}",
+            category="runtime",
+        )

@@ -1,5 +1,5 @@
 from backend.autonomy.agent_loop import AgentLoop
-from backend.autonomy.tools import register_all
+from backend.autonomy.tools import register_all, register_dispatcher_tools
 
 
 class _Memory:
@@ -56,6 +56,41 @@ def test_agent_loop_registers_code_quality_tool():
     register_all(loop)
 
     assert "code_quality" in loop.tools
+    assert loop.tool_specs["code_quality"].category == "code"
+
+
+def test_agent_loop_tool_docs_include_runtime_categories_and_schemas():
+    loop = AgentLoop(memory=_Memory(), tools={})
+
+    register_all(loop)
+    docs = loop._tool_descriptions()
+
+    assert "### code" in docs
+    assert "code_search" in docs
+    assert '"pattern": "str"' in docs
+
+
+def test_agent_loop_can_import_dispatcher_registry_tools():
+    class Dispatcher:
+        async def dispatch(self, name, args):
+            return {"ok": True, "tool": name, "args": args}
+
+    class Registry:
+        def describe(self):
+            return [
+                {"name": "web_fetch", "callable": "fetch"},
+                {"name": "code_search", "callable": "search_files"},
+                {"name": "controlled_agent_assign", "callable": "assign_task"},
+            ]
+
+    loop = AgentLoop(memory=_Memory(), tools={})
+    register_all(loop)
+    register_dispatcher_tools(loop, Dispatcher(), Registry())
+
+    assert "web_fetch" in loop.tools
+    assert loop.tool_specs["web_fetch"].category == "runtime"
+    assert loop.tool_specs["code_search"].category == "code"
+    assert "controlled_agent_assign" not in loop.tools
 
 
 def test_agent_loop_prompt_requires_diagnostics_for_repair_requests():

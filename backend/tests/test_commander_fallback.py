@@ -139,6 +139,22 @@ def test_reference_agent_message_uses_agent_loop_not_capability_registry():
     assert result["plan"]["intent"] == "agent_loop"
 
 
+def test_open_ended_tool_intents_use_agent_loop():
+    import asyncio
+
+    commander = Commander(
+        dispatcher=None,
+        memory=_Memory(),
+        logger=None,
+        agent_loop=_AgentLoop(),
+    )
+
+    for text in ("我让你优化他", "搜索记忆：联网能力", "反思最近一次失败", "参考 OpenClaw 怎么设计工具"):
+        result = asyncio.run(commander.handle_message(text))
+        assert result["text"] == "agent loop handled"
+        assert result["plan"]["intent"] == "agent_loop"
+
+
 def test_gateway_restart_request_is_deterministic():
     commander = Commander(dispatcher=None, memory=None, logger=None)
 

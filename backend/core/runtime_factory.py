@@ -8,7 +8,7 @@ from pathlib import Path
 from backend.agents.local import LocalAgentHub
 from backend.config import get_settings
 from backend.autonomy.agent_loop import AgentLoop, AgentConfig
-from backend.autonomy.tools import register_all as register_agent_tools
+from backend.autonomy.tools import register_all as register_agent_tools, register_dispatcher_tools
 from backend.autonomy.loop import AutonomyEngine
 from backend.core.commander import Commander
 from backend.core.context import RuntimeContext
@@ -97,6 +97,7 @@ def build_runtime(project_root: Path | None = None, data_dir: Path | None = None
     )
     # Register all agent tools
     register_agent_tools(agent_loop)
+    register_dispatcher_tools(agent_loop, dispatcher, tools)
 
     # ── LLM Router ─────────────────────────────────────────────────────
     llm_router = get_router()

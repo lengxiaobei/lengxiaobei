@@ -419,10 +419,17 @@ class Commander:
         """
         if self.agent_loop is None:
             return False
-        # Code modification and open-ended chat both benefit from multi-turn
-        if plan.intent in ("code_modification", "chat"):
-            return True
-        return False
+        deterministic_intents = {
+            "self_capability",
+            "model_info",
+            "gateway_restart",
+            "system_status",
+            "local_agents",
+        }
+        # Keep only small management answers deterministic. Everything else,
+        # including memory/reflect/skill/UI/reference prompts, should flow into
+        # the runtime tool loop so the model can choose tools from the catalog.
+        return plan.intent not in deterministic_intents
 
     async def _agent_loop_reply(self, text: str, channel: str) -> dict[str, Any]:
         """Route through the Agent Loop for multi-turn tool-calling."""
