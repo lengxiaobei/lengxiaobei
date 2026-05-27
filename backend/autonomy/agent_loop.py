@@ -31,12 +31,27 @@ from backend.config import get_settings
 #   {"path": "backend/core/commander.py"}
 #   </tool>
 #
+# Some models also produce:
+#
+#   <tool_call>
+#   <tool_name>filesystem_read</tool_name>
+#   <args>{"path": "backend/core/commander.py"}</args>
+#   </tool_call>
+#
 # This works with ANY LLM that can follow instructions — no need for
 # Claude's JSON tool_use or OpenAI's function_calling format.
 
 TOOL_CALL_RE = re.compile(
     r'<tool\s+name=["\']([^"\']+)["\']>\s*(.*?)\s*</tool>',
     re.DOTALL,
+)
+XML_TOOL_CALL_RE = re.compile(
+    r"<tool_call>\s*<tool_name>\s*(.*?)\s*</tool_name>\s*<args>\s*(.*?)\s*</args>\s*</tool_call>",
+    re.DOTALL | re.IGNORECASE,
+)
+LEGACY_FUNCTION_TOOL_CALL_RE = re.compile(
+    r"<tool_call>.*?</tool_call>",
+    re.DOTALL | re.IGNORECASE,
 )
 
 TOOL_RESULT_TEMPLATE = (
@@ -261,21 +276,30 @@ class AgentLoop:
     # ── Tool call parsing (model-agnostic) ───────────────────────────
 
     def _parse_tool_calls(self, text: str) -> list[dict[str, Any]]:
-        """Parse <tool name="...">...</tool> blocks from LLM output."""
+        """Parse supported model-agnostic tool-call blocks from LLM output."""
         calls = []
         for match in TOOL_CALL_RE.finditer(text):
             name = match.group(1).strip()
             args_text = match.group(2).strip()
-            try:
-                args = json.loads(args_text) if args_text else {}
-            except json.JSONDecodeError:
-                args = {"raw_input": args_text}
-            calls.append({"name": name, "args": args})
+            calls.append({"name": name, "args": self._parse_tool_args(args_text)})
+        for match in XML_TOOL_CALL_RE.finditer(text):
+            name = match.group(1).strip()
+            args_text = match.group(2).strip()
+            calls.append({"name": name, "args": self._parse_tool_args(args_text)})
         return calls
 
+    def _parse_tool_args(self, args_text: str) -> dict[str, Any]:
+        try:
+            return json.loads(args_text) if args_text else {}
+        except json.JSONDecodeError:
+            return {"raw_input": args_text}
+
     def _strip_tool_tags(self, text: str) -> str:
-        """Remove <tool>...</tool> blocks from LLM output for the final reply."""
-        return TOOL_CALL_RE.sub("", text).strip()
+        """Remove tool-call blocks from LLM output for the final reply."""
+        stripped = TOOL_CALL_RE.sub("", text)
+        stripped = XML_TOOL_CALL_RE.sub("", stripped)
+        stripped = LEGACY_FUNCTION_TOOL_CALL_RE.sub("", stripped)
+        return stripped.strip()
 
     # ── Tool execution ────────────────────────────────────────────────
 
