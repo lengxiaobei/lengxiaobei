@@ -133,7 +133,7 @@ def build_runtime(project_root: Path | None = None, data_dir: Path | None = None
     scheduler.add_interval_job("code-quality-check", 60 * 60, lambda: autonomy.tick("scheduled code quality check", force=True))
     capability_registry = CapabilityRegistry()
     user_profile = UserProfileManager(sqlite)
-    commander = Commander(dispatcher=dispatcher, memory=memory_tree, logger=logger, capability_registry=capability_registry, user_profile=user_profile)
+    commander = Commander(dispatcher=dispatcher, memory=memory_tree, logger=logger, capability_registry=capability_registry, user_profile=user_profile, agent_loop=agent_loop)
 
     runtime = RuntimeContext(
         project_root=root,

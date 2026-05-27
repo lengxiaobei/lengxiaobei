@@ -30,12 +30,13 @@ class TaskPlan:
 class Commander:
     """把用户输入翻译成计划、工具调用和最终回复。"""
 
-    def __init__(self, dispatcher: Any, memory: Any, logger: Any, capability_registry: Any | None = None, user_profile: Any | None = None):
+    def __init__(self, dispatcher: Any, memory: Any, logger: Any, capability_registry: Any | None = None, user_profile: Any | None = None, agent_loop: Any | None = None):
         self.dispatcher = dispatcher
         self.memory = memory
         self.logger = logger
         self.capability_registry = capability_registry
         self.user_profile = user_profile
+        self.agent_loop = agent_loop
 
     async def handle_message(self, text: str, channel: str = "web") -> dict[str, Any]:
         """处理单轮消息。
@@ -64,17 +65,12 @@ class Commander:
         observation = None
         settings = get_settings()
 
-        # Claude native Tool Use path — for open-ended requests when provider is anthropic
-        if self._should_use_claude_tools(plan, settings):
-            reply = await self._claude_tool_use_reply(text, recall, settings)
-            # Record the reply as a conversation node; tool calls are logged by the adapter
-            self.memory.add_node(
-                content=reply,
-                node_type="conversation",
-                metadata={"role": "assistant", "channel": channel, "intent": plan.intent, "claude_tools": True},
-                summary=reply[:120],
-            )
-            return {"text": reply, "plan": {"intent": "claude_tools", "tool": None, "args": {}, "reason": "Claude native Tool Use"}, "observation": None, "recall": recall}
+        # Agent Loop path — multi-turn tool-calling for complex requests
+        # This is LengXiaobei's OWN ability: read → plan → edit → verify → fix
+        # Works with ANY configured LLM (Ollama, token-plan, anthropic, etc.)
+        if self._should_use_agent_loop(plan, settings):
+            result = await self._agent_loop_reply(text, channel)
+            return result
 
         if plan.tool:
             observation = await self.dispatcher.dispatch(plan.tool, plan.args)
@@ -134,12 +130,7 @@ class Commander:
 
         # Compound intents that need extra args
         if self._is_controlled_agent_assignment(compact, norm):
-            return TaskPlan(
-                "controlled_agent_assign",
-                "controlled_agent_assign",
-                {"target": self._controlled_agent_target(compact), "task": text, "execute": True},
-                "用户希望把任务分配给本地 OpenClaw/Hermes/OpenHuman",
-            )
+            return TaskPlan("reference_gap", None, {}, "用户提到参考系统；按冷小北原生能力解释，不分配给外部 agent")
 
         # Keyword-based fallback
         if "状态" in text or "status" in norm or "健康" in text:
@@ -147,7 +138,7 @@ class Commander:
         if "搜索记忆" in text or "memory" in norm or "记忆" in text:
             return TaskPlan("memory_search", "memory_search", {"query": text, "limit": 5}, "需要从长期记忆检索")
         if "反思" in text or "reflect" in norm:
-            return TaskPlan("reflect", "reflect", {"topic": text}, "触发 Hermes 风格反思")
+            return TaskPlan("reflect", "reflect", {"topic": text}, "触发冷小北原生反思")
         if "技能" in text or "skill" in norm:
             return TaskPlan("skill_list", "skill_list", {}, "查看待审核/可用技能")
         return TaskPlan("chat", None, {}, "普通对话，由配置的 LLM 回复")
@@ -322,15 +313,15 @@ class Commander:
 
     def _reference_gap_reply(self) -> str:
         return (
-            "对标 OpenClaw、Hermes、OpenHuman，我现在是一个本地优先的骨架实现，核心抽象已经有了，"
-            "但还没到三个项目完整能力的深度。\n\n"
-            "OpenClaw 方向还缺：真实多渠道生产级接入、完整 Channel 生命周期管理、复杂任务规划、"
+            "对标 OpenClaw、Hermes、OpenHuman 的能力类型，我现在是一个本地优先的骨架实现。"
+            "它们只作为参照，目标是把能力长在冷小北自己身上，不是接入或遥控它们。\n\n"
+            "通道与工具方向还缺：真实多渠道生产级接入、完整 Channel 生命周期管理、复杂任务规划、"
             "可写/可执行工具沙箱、权限审批流、工具市场和更细的 trace 可视化。目前 Telegram、WhatsApp、Slack、"
             "Playwright Browser 都是可选适配边界，运行时默认只开放读文件和只读 Shell。\n\n"
-            "OpenHuman 方向还缺：大规模 Sync Connectors 的真实授权同步、稳定的增量同步和冲突处理、"
+            "记忆连续性方向还缺：大规模 Sync Connectors 的真实授权同步、稳定的增量同步和冲突处理、"
             "更成熟的 MemoryTree 人工编辑体验、实体抽取、时间线、知识图谱推理和长期画像演化。现在已有 SQLite 记忆树、"
             "VectorStore fallback、GraphStore 边界和同步管理框架，但深度还需要补。\n\n"
-            "Hermes 方向还缺：从执行轨迹自动沉淀技能后的高质量验证、自动评估集、失败归因、技能版本管理、"
+            "反思与技能方向还缺：从执行轨迹自动沉淀技能后的高质量验证、自动评估集、失败归因、技能版本管理、"
             "回滚机制、多模型评审和真正闭环的自我改进。目前已有 SkillGen、SkillStore、Reflector、Evaluator，"
             "新技能默认 pending，需要人工审核。\n\n"
             "最关键的下一步，我建议按顺序补三件事：1. 审核型 patch/write 工具；2. 技能验证与回滚；"
@@ -341,7 +332,7 @@ class Commander:
         return (
             "可以，现在我已经具备项目内源码修改工具，但要分层说清楚：我不能修改云端模型权重，也不能越过项目边界。"
             "在 lengxiaobei 这个本地项目里，我已经能写长期记忆、反思执行轨迹、生成 pending 技能并等待审核；"
-            "这些属于 Hermes/OpenHuman 风格的自我进化。"
+            "这些属于冷小北自己的原生自我进化。"
             "源码级修改方面，运行时已经开放 filesystem_write、filesystem_append、filesystem_delete 和 shell_exec，"
             "可以在项目根目录内改文件、运行检查、把执行轨迹写入 trace。"
             "我仍然会拒绝读写 .env 这类本地密钥文件，也不能直接改项目外路径。"
@@ -430,6 +421,39 @@ class Commander:
             self.logger.warning("Claude Tool Use failed: %s", exc)
             # Fallback to regular ollama chat
             return await ollama_chat(text, system=system)
+
+    def _should_use_agent_loop(self, plan: TaskPlan, settings: Any) -> bool:
+        """Decide whether to route through the multi-turn Agent Loop.
+
+        Use Agent Loop for any request where LengXiaobei needs to reason
+        about code or take multiple actions — not just for Claude.
+        """
+        if self.agent_loop is None:
+            return False
+        # Code modification and open-ended chat both benefit from multi-turn
+        if plan.intent in ("code_modification", "chat"):
+            return True
+        return False
+
+    async def _agent_loop_reply(self, text: str, channel: str) -> dict[str, Any]:
+        """Route through the Agent Loop for multi-turn tool-calling."""
+        try:
+            result = await self.agent_loop.handle(text, channel=channel)
+            return {
+                "text": result.reply,
+                "plan": {"intent": "agent_loop", "tool": None, "args": {}, "reason": "multi-turn agent loop"},
+                "observation": None,
+                "recall": [],
+                "tool_calls": result.tool_calls,
+                "iterations": result.iterations,
+                "elapsed_ms": result.elapsed_ms,
+            }
+        except Exception as exc:
+            self.logger.warning("Agent Loop failed, falling back to simple chat: %s", exc)
+            # Fallback to simple LLM chat
+            system = self._system_prompt(self._recall_context(text))
+            reply = await ollama_chat(text, system=system)
+            return {"text": reply, "plan": {"intent": "chat_fallback", "tool": None, "args": {}, "reason": "agent loop failed"}, "observation": None, "recall": []}
 
     # ------------------------------------------------------------------
     # Prompt / sanitize / summarize
@@ -520,7 +544,7 @@ class Commander:
             for agent in agents:
                 callable_label = "可命令执行" if agent.get("callable") else "通过 inbox 投递"
                 lines.append(f"- {agent.get('name')} [{agent.get('id')}]：{callable_label}；{agent.get('description')}")
-            return "已接入本地 OpenClaw / Hermes / OpenHuman 控制层：\n" + "\n".join(lines)
+            return "当前保留的是兼容发现层，不是冷小北的能力目标；原生能力应优先落在通道、反思技能和记忆连续性里：\n" + "\n".join(lines)
         if observation.get("tool") == "controlled_agent_assign":
             result = observation.get("result") or {}
             target = (result.get("target") or {}).get("name", "unknown")
@@ -593,7 +617,7 @@ def _check_gateway_restart(compact: str, norm: str) -> bool:
 def _check_reference_agent_connect(compact: str, norm: str) -> bool:
     ref = any(kw in compact for kw in ("openclaw", "hermes", "openhuman"))
     connect = any(kw in compact for kw in ("接入", "连接", "控制", "分配任务", "派任务")) or "assign" in norm
-    return ref and connect
+    return False
 
 
 def _check_local_agent(compact: str, norm: str) -> bool:
@@ -610,6 +634,6 @@ Commander._INTENT_TABLE = [
     ("reference_gap", None, "用户询问对标 OpenClaw/Hermes/OpenHuman 的能力差距", _check_reference_gap),
     ("model_info", None, "用户询问当前模型配置", _check_model_question),
     ("gateway_restart", None, "用户要求重启 lengxiaobei 后端网关", _check_gateway_restart),
-    ("controlled_agents", "controlled_agent_list", "用户希望接入本地 OpenClaw/Hermes/OpenHuman", _check_reference_agent_connect),
+    ("controlled_agents", "controlled_agent_list", "兼容发现层已停用；优先冷小北原生能力", _check_reference_agent_connect),
     ("local_agents", "local_agent_list", "用户希望接入或查看本地 agent", _check_local_agent),
 ]
