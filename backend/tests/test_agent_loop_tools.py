@@ -1,4 +1,5 @@
 from backend.autonomy.agent_loop import AgentLoop
+from backend.autonomy.tools import register_all
 
 
 class _Memory:
@@ -47,3 +48,21 @@ def test_agent_loop_strips_all_tool_call_formats():
     assert "<tool" not in text
     assert "before" in text
     assert "after" in text
+
+
+def test_agent_loop_registers_code_quality_tool():
+    loop = AgentLoop(memory=_Memory(), tools={})
+
+    register_all(loop)
+
+    assert "code_quality" in loop.tools
+
+
+def test_agent_loop_prompt_requires_diagnostics_for_repair_requests():
+    loop = AgentLoop(memory=_Memory(), tools={})
+
+    prompt = loop._build_system_prompt([])
+
+    assert "修复类请求的硬要求" in prompt
+    assert "code_quality" in prompt
+    assert "不要只解释原因" in prompt

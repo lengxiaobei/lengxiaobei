@@ -157,6 +157,17 @@ async def system_status(args: dict[str, Any]) -> dict[str, Any]:
         return {"error": str(exc)}
 
 
+async def code_quality(args: dict[str, Any]) -> dict[str, Any]:
+    """Run LengXiaobei's code quality suite: compile, tests, missing tests, large files, anti-patterns."""
+    try:
+        from backend.autonomy.code_quality import run_all_checks
+        from backend.config import PROJECT_ROOT
+
+        return run_all_checks(Path(PROJECT_ROOT))
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
 async def reflect(args: dict[str, Any]) -> dict[str, Any]:
     topic = args.get("topic", "")
     try:
@@ -254,6 +265,7 @@ def register_all(agent_loop: Any) -> None:
         ("memory_search", memory_search),
         ("memory_recall", memory_recall),
         ("system_status", system_status),
+        ("code_quality", code_quality),
         ("reflect", reflect),
         ("goals", goals),
         ("skill_list", skill_list),

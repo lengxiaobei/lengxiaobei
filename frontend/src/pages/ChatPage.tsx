@@ -8,7 +8,7 @@ import { useSystemStore } from "../stores/systemStore";
 
 const suggestions = [
   "检查冷小北现在能做什么",
-  "复盘最近一次失败并给出修复动作",
+  "定位并修复最近一次失败，完成后运行验证",
   "把这段对话整理进长期记忆",
   "找一个最小改进点并自己验证"
 ];

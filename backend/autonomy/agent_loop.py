@@ -256,6 +256,11 @@ class AgentLoop:
             "3. 验证结果：修改后运行编译检查或测试\n"
             "4. 失败修复：如果验证失败，分析错误信息并修复\n"
             "5. 诚实边界：不能读写 .env 文件，不能访问项目外路径\n\n"
+            "## 修复类请求的硬要求\n\n"
+            "当用户要求修复、定位问题、自己验证、前台报错、后端报错或能力不可用时，"
+            "不要只解释原因。必须至少执行一次诊断工具，例如 code_quality、code_search、"
+            "filesystem_read、shell_exec 或 list_files；如果定位到明确源码问题，优先用 "
+            "filesystem_edit 精确修复，然后用 shell_exec 或 code_quality 验证。\n\n"
             f"{recall_text}\n"
             "回答要简洁、直接、有主见。中文优先。"
         )
