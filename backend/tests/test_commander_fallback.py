@@ -2,6 +2,36 @@ from backend.core.commander import Commander
 from backend.core.llm.ollama import local_fallback
 
 
+class _Memory:
+    def __init__(self):
+        self.nodes = []
+
+    def add_node(self, **kwargs):
+        self.nodes.append(kwargs)
+
+    def search(self, *args, **kwargs):
+        return []
+
+    def list_recent(self, *args, **kwargs):
+        return []
+
+
+class _RegistryThatMustNotRun:
+    async def match(self, text):
+        raise AssertionError("capability registry should not intercept conversation before AgentLoop")
+
+
+class _AgentLoop:
+    async def handle(self, text, channel="web"):
+        class Result:
+            reply = "agent loop handled"
+            tool_calls = []
+            iterations = 1
+            elapsed_ms = 1
+
+        return Result()
+
+
 def test_system_prompt_filters_adapter_failure_memories():
     commander = Commander(dispatcher=None, memory=None, logger=None)
 
@@ -88,8 +118,25 @@ def test_reference_agent_assignment_stays_native():
 
     plan = commander._plan("让 Hermes 反思最近失败的技能生成任务")
 
-    assert plan.intent == "reference_gap"
+    assert plan.intent == "chat"
     assert plan.tool is None
+
+
+def test_reference_agent_message_uses_agent_loop_not_capability_registry():
+    import asyncio
+
+    commander = Commander(
+        dispatcher=None,
+        memory=_Memory(),
+        logger=None,
+        capability_registry=_RegistryThatMustNotRun(),
+        agent_loop=_AgentLoop(),
+    )
+
+    result = asyncio.run(commander.handle_message("让 Hermes 反思最近失败的技能生成任务"))
+
+    assert result["text"] == "agent loop handled"
+    assert result["plan"]["intent"] == "agent_loop"
 
 
 def test_gateway_restart_request_is_deterministic():

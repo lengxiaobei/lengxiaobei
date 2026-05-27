@@ -50,17 +50,6 @@ class Commander:
             summary=text[:120],
         )
         recall = self._recall_context(text)
-        capability_task = await self.capability_registry.match(text) if self.capability_registry else None
-        if capability_task:
-            result = await self.capability_registry.submit(capability_task)
-            reply = self._summarize_capability_result(result)
-            self.memory.add_node(
-                content=reply,
-                node_type="conversation",
-                metadata={"role": "assistant", "channel": channel, "intent": "capability_task"},
-                summary=reply[:120],
-            )
-            return {"text": reply, "plan": {"intent": "capability_task", "tool": None, "args": capability_task.public_dict(), "reason": "matched local kernel capability"}, "observation": result, "recall": recall}
         plan = self._plan(text)
         observation = None
         settings = get_settings()
@@ -130,7 +119,7 @@ class Commander:
 
         # Compound intents that need extra args
         if self._is_controlled_agent_assignment(compact, norm):
-            return TaskPlan("reference_gap", None, {}, "用户提到参考系统；按冷小北原生能力解释，不分配给外部 agent")
+            return TaskPlan("chat", None, {}, "用户提到参考系统；按冷小北原生能力交给 AgentLoop 处理")
 
         # Keyword-based fallback
         if "状态" in text or "status" in norm or "健康" in text:
