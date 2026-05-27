@@ -430,6 +430,111 @@ nav button.active {
   word-break: break-word;
 }
 
+.collapse-toggle {
+  align-items: center;
+  background: rgba(47, 252, 255, 0.06);
+  border: 1px solid rgba(47, 252, 255, 0.18);
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 12px;
+  gap: 5px;
+  margin-top: 4px;
+  padding: 5px 10px;
+  transition: border-color 0.2s, color 0.2s, background 0.2s;
+}
+
+.collapse-toggle:hover {
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
+  background: rgba(47, 252, 255, 0.12);
+}
+
+/* ── Message segments & tool result blocks ──────────────────────── */
+
+.message-segments {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tool-result-block {
+  border: 1px solid rgba(47, 252, 255, 0.15);
+  border-radius: 6px;
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+
+.tool-result-block:hover {
+  border-color: rgba(47, 252, 255, 0.3);
+}
+
+.tool-result-header {
+  align-items: center;
+  background: rgba(47, 252, 255, 0.04);
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  font-size: 12px;
+  gap: 6px;
+  padding: 7px 10px;
+  text-align: left;
+  width: 100%;
+}
+
+.tool-result-header:hover {
+  background: rgba(47, 252, 255, 0.08);
+  color: var(--text-primary);
+}
+
+.tool-result-icon {
+  color: var(--accent-cyan);
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.tool-result-name {
+  color: var(--accent-cyan);
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.tool-result-summary {
+  color: var(--text-muted);
+  flex: 1;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-result-header > svg:last-child {
+  color: var(--text-dim);
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.tool-result-content {
+  background: rgba(0, 0, 0, 0.3);
+  border-top: 1px solid rgba(47, 252, 255, 0.1);
+  max-height: 400px;
+  overflow: auto;
+  padding: 8px 10px;
+}
+
+.tool-result-content pre {
+  color: var(--text-secondary);
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
 .chat-empty {
   align-content: center;
   background: rgba(5, 10, 20, 0.66);
@@ -875,6 +980,47 @@ textarea {
   margin: 8px 0;
   padding: 4px 12px;
   color: var(--text-secondary);
+}
+
+/* ── Collapsible code blocks ───────────────────────────────────── */
+.code-collapse-wrapper {
+  margin: 10px 0;
+}
+
+.code-collapse-btn {
+  align-items: center;
+  background: rgba(47, 252, 255, 0.06);
+  border: 1px solid rgba(47, 252, 255, 0.18);
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 12px;
+  font-family: inherit;
+  gap: 5px;
+  padding: 5px 12px;
+  transition: border-color 0.2s, color 0.2s, background 0.2s;
+}
+
+.code-collapse-btn:hover {
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
+  background: rgba(47, 252, 255, 0.12);
+}
+
+.code-collapsible {
+  display: none;
+  margin-top: 0;
+  border-top-left-radius: 0;
+}
+
+.code-collapse-wrapper.code-expanded .code-collapsible {
+  display: block;
+}
+
+.code-collapse-wrapper.code-expanded .code-collapse-btn {
+  border-radius: 6px 6px 0 0;
 }
 
 @media (max-width: 1180px) {
