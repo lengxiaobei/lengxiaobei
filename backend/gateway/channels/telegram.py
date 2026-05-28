@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
-import requests
+import httpx
 
 from backend.gateway.channels.base import BaseChannel
 
@@ -28,8 +28,14 @@ class TelegramChannel(BaseChannel):
         if not chat_id:
             raise RuntimeError("telegram chat_id is required")
         url = f"https://api.telegram.org/bot{self.token}/sendMessage"
-        res = requests.post(url, json={"chat_id": chat_id, "text": text}, timeout=20)
-        res.raise_for_status()
+        try:
+            async with httpx.AsyncClient() as client:
+                res = await client.post(url, json={"chat_id": chat_id, "text": text}, timeout=20)
+            res.raise_for_status()
+        except httpx.TimeoutException:
+            raise RuntimeError("telegram sendMessage timed out")
+        except httpx.HTTPError as exc:
+            raise RuntimeError(f"telegram sendMessage failed: {exc}")
 
     def normalize_update(self, update: dict[str, Any]) -> dict[str, Any]:
         message = update.get("message") or update.get("edited_message") or {}

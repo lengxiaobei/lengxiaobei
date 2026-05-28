@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
-import requests
+import httpx
 
 from backend.gateway.channels.base import BaseChannel
 
@@ -23,16 +23,22 @@ class SlackChannel(BaseChannel):
         channel = kwargs.get("channel") or kwargs.get("channel_id") or self.default_channel_id
         if not channel:
             raise RuntimeError("slack channel_id is required")
-        res = requests.post(
-            "https://slack.com/api/chat.postMessage",
-            json={"channel": channel, "text": text},
-            headers={"Authorization": f"Bearer {self.token}"},
-            timeout=20,
-        )
-        res.raise_for_status()
-        payload = res.json()
-        if not payload.get("ok"):
-            raise RuntimeError(payload.get("error") or "slack send failed")
+        try:
+            async with httpx.AsyncClient() as client:
+                res = await client.post(
+                    "https://slack.com/api/chat.postMessage",
+                    json={"channel": channel, "text": text},
+                    headers={"Authorization": f"Bearer {self.token}"},
+                    timeout=20,
+                )
+            res.raise_for_status()
+            payload = res.json()
+            if not payload.get("ok"):
+                raise RuntimeError(payload.get("error") or "slack send failed")
+        except httpx.TimeoutException:
+            raise RuntimeError("slack sendMessage timed out")
+        except httpx.HTTPError as exc:
+            raise RuntimeError(f"slack sendMessage failed: {exc}")
 
     def normalize_update(self, update: dict[str, Any]) -> dict[str, Any]:
         event = update.get("event") or update

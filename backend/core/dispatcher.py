@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import Any
 
 
-@dataclass(slots=True)
+@dataclass
 class ToolObservation:
     """工具执行结果，参考 OpenClaw observation schema 与 Hermes trace。"""
 
@@ -62,8 +62,8 @@ class Dispatcher:
 
     def _record(self, observation: ToolObservation, args: dict[str, Any]) -> None:
         """保留最近执行轨迹，供 Hermes 风格反思器提炼技能。"""
-        trace = {"args": args, **observation.as_dict()}
+        trace = {"args": args, "created_at": time.time(), **observation.as_dict()}
         self.trace.append(trace)
-        del self.trace[:-200]
+        self.trace = self.trace[-200:]  # Keep last 200 traces
         if self.sqlite:
             self.sqlite.record_tool_trace(trace)

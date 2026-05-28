@@ -22,6 +22,7 @@ wheels/
 
 # Virtual Environment
 venv/
+.venv/
 ENV/
 env/
 
@@ -80,8 +81,12 @@ integrity/*.json
 src/integrity/*.json
 
 # Local configuration
+.env
 *.local
 .env.local
+
+# Playwright CLI
+.playwright-cli/
 
 # Runtime state
 .sdk_state.json
@@ -93,10 +98,13 @@ data/sqlite/*.db-wal
 data/chroma/*
 data/logs/*
 data/uploads/*
+data/autonomy/*
+data/skills/*
 !data/README.md
 !data/chroma/.gitkeep
 !data/logs/.gitkeep
 !data/uploads/.gitkeep
+!data/skills/.gitkeep
 memory/memory.db
 memory/*.db-shm
 memory/*.db-wal

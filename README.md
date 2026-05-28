@@ -1,6 +1,6 @@
 # lengxiaobei
 
-> 一个融合 OpenClaw、Hermes、OpenHuman 核心思想的自主进化智能体框架  
+> 一个吸收 OpenClaw、Hermes、OpenHuman 能力思想的自主进化智能体框架  
 > 专为本地部署设计，支持多渠道接入、长期记忆树和自我技能进化
 
 ## 目录
@@ -23,12 +23,13 @@
 
 | 特性 | 说明 |
 |------|------|
-| **自主进化** | 基于 Hermes 闭环学习，从执行轨迹中提炼新技能 |
-| **记忆树** | 参考 OpenHuman，构建结构化、可编辑的个人知识库 |
-| **多渠道接入** | 继承 OpenClaw 网关设计，支持 WebSocket、Telegram、WhatsApp、Slack 等边界 |
+| **自主进化** | 冷小北原生闭环学习，从执行轨迹中提炼新技能 |
+| **记忆树** | 冷小北原生结构化、可编辑的个人知识库 |
+| **多渠道接入** | 冷小北原生网关设计，支持 WebSocket、Telegram、WhatsApp、Slack 等边界 |
 | **本地优先** | 运行数据默认存储在本地 SQLite、文件系统和可选向量库中 |
 | **可视化控制台** | React + TypeScript 前端，管理记忆、技能、进化过程和系统设置 |
 | **工具生态** | 内置文件、Shell、Web、浏览器等工具，支持动态技能安装与审核 |
+| **原生能力内核** | 把项目执行、通道运行、记忆连续性、反思和技能验证做进冷小北自身，而不是依赖下游 agent |
 
 ### 参考项目
 
@@ -38,11 +39,11 @@
 
 ## 设计哲学
 
-lengxiaobei 将三个项目的核心思想有机融合：
+lengxiaobei 将三个项目的核心思想吸收为自己的原生能力：
 
-> **OpenClaw 提供骨架：接入 + 调度**  
-> **OpenHuman 提供血脉：记忆 + 数据**  
-> **Hermes 提供灵魂：学习 + 进化**
+> **通道与工具提供骨架：接入 + 调度**  
+> **记忆连续性提供血脉：记忆 + 数据**  
+> **反思与技能提供灵魂：学习 + 进化**
 
 整体遵循以下原则：
 
@@ -139,6 +140,33 @@ pip install -e ".[dev]"
 # 可选增强：Chroma、FAISS、Playwright、APScheduler 等
 pip install -e ".[dev,full]"
 ```
+
+### 原生能力蓝图
+
+OpenClaw、Hermes、OpenHuman 在本项目中是能力参照，不是必须接入的下游系统。冷小北优先把这些能力实现到自身：
+
+| 能力线 | 目标 | 当前落点 |
+|------|------|----------|
+| 通道与工具运行时 | 多渠道入口、工具调度、可审计执行、项目内自修改 | Gateway、Dispatcher、Tools、audit trace |
+| 反思与技能闭环 | 轨迹复盘、技能草稿、验证、回滚和评估 | Evolution、SkillStore、Reflector、Evaluator |
+| 记忆连续性 | 记忆树、画像、时间线、图谱、同步连接器 | MemoryTree、VectorStore、GraphStore、Sync |
+
+冷小北仍可扫描常见本地 agent 目录中的 `AGENTS.md`、`CLAUDE.md`、`GEMINI.md`、`SOUL.md`、`BOOTSTRAP.md` 和 `IDENTITY.md`，这只是兼容发现层，不是能力成长主线。如果额外 agent 需要直接调用，把 `data/local_agents.example.json` 复制为 `data/local_agents.json`，为它配置 `command`：
+
+```json
+{
+  "agents": [
+    {
+      "id": "codex-local",
+      "name": "Codex Local",
+      "root": "~/.codex",
+      "command": ["codex", "exec", "{prompt}"]
+    }
+  ]
+}
+```
+
+也可以用 `LOCAL_AGENT_ROOTS=~/.codex,~/.openclaw,~/projects` 覆盖扫描目录。后端工具包括 `local_agent_list`、`local_agent_describe` 和 `local_agent_run`。
 
 ### Docker Compose
 

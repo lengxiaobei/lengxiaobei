@@ -5,8 +5,11 @@
 
 from __future__ import annotations
 
-import requests
+import httpx
 
 
-def fetch(url: str, timeout: int = 20) -> str:
-    return requests.get(url, timeout=timeout).text
+async def fetch(url: str, timeout: int = 20) -> str:
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(url, timeout=timeout)
+        resp.raise_for_status()
+        return resp.text

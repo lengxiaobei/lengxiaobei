@@ -10,12 +10,13 @@ from __future__ import annotations
 
 import contextlib
 import json
+import time
 from typing import Any
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.api.routes import channels, conversations, evolution, memory, skills, system
+from backend.api.routes import autonomy, channels, conversations, evolution, memory, mcp, llm_router, sessions, skills, system, trace
 from backend.config import get_settings
 from backend.core.runtime_factory import build_runtime
 
@@ -34,6 +35,13 @@ def create_app() -> FastAPI:
     @app.on_event("startup")
     async def _start_scheduler() -> None:
         runtime.scheduler.start()
+        # Initialize MCP connections
+        if runtime.mcp_manager:
+            try:
+                from backend.tools.mcp_client import init_mcp
+                await init_mcp()
+            except Exception as exc:
+                runtime.logger.warning("Failed to initialize MCP connections on startup: %s", exc, exc_info=True)
 
     @app.on_event("shutdown")
     async def _stop_scheduler() -> None:
@@ -52,6 +60,48 @@ def create_app() -> FastAPI:
     app.include_router(skills.router, prefix="/api/skills", tags=["skills"])
     app.include_router(channels.router, prefix="/api/channels", tags=["channels"])
     app.include_router(evolution.router, prefix="/api/evolution", tags=["evolution"])
+    app.include_router(autonomy.router, prefix="/api/autonomy", tags=["autonomy"])
+    app.include_router(sessions.router, prefix="/api/sessions", tags=["sessions"])
+    app.include_router(llm_router.router, prefix="/api/llm", tags=["llm-router"])
+    app.include_router(mcp.router, prefix="/api/mcp", tags=["mcp"])
+    app.include_router(trace.router, prefix="/api/trace", tags=["trace"])
+
+    @app.get("/")
+    async def root() -> dict[str, Any]:
+        return {
+            "status": "ok",
+            "service": "lengxiaobei-youragent-gateway",
+            "message": "LengXiaobei backend is running. Open /docs for API docs or start the frontend at http://127.0.0.1:5173.",
+            "docs": "/docs",
+            "health": "/api/health",
+            "system_status": "/api/system/status",
+            "frontend_dev": "http://127.0.0.1:5173",
+        }
+
+    @app.get("/api")
+    async def api_index() -> dict[str, Any]:
+        return {
+            "status": "ok",
+            "routes": [
+                "/api/health",
+                "/api/system/status",
+                "/api/conversations",
+                "/api/memory",
+                "/api/skills",
+                "/api/channels",
+                "/api/evolution",
+                "/api/autonomy",
+            ],
+        }
+
+    @app.get("/api/status")
+    async def legacy_status() -> dict[str, Any]:
+        return {
+            "status": "running",
+            "uptime_seconds": round(time.time() - runtime.started_at, 3),
+            "service": "lengxiaobei-youragent-gateway",
+            "note": "Use /api/system/status for the canonical status endpoint.",
+        }
 
     @app.get("/api/health")
     async def health() -> dict[str, Any]:
@@ -67,6 +117,13 @@ def create_app() -> FastAPI:
         """WebSocket channel,参考 OpenClaw 多渠道接入。"""
         await ws.accept()
         await ws.send_json({"type": "system.connected", "payload": {"status": "connected"}})
+        # Push initial system status so the frontend doesn't need to poll
+        try:
+            from backend.api.routes.system import _build_status
+            status = await _build_status(runtime)
+            await ws.send_json({"type": "system.status", "payload": status})
+        except Exception as exc:
+            runtime.logger.warning("Failed to push initial system status over WebSocket: %s", exc, exc_info=True)
         try:
             while True:
                 raw = await ws.receive_text()
@@ -81,10 +138,28 @@ def create_app() -> FastAPI:
                 if not text:
                     await ws.send_json({"type": "error", "payload": {"message": "empty message"}})
                     continue
+                runtime.touch_activity(source="websocket")
                 runtime.emit("agent.thinking", {"text": "planning", "channel": "websocket"})
                 await ws.send_json({"type": "agent.thinking", "payload": {"text": "planning"}})
-                result = await runtime.commander.handle_message(text)
-                await ws.send_json({"type": "chat.response", "payload": result})
+                # Route through Commander for proper intent detection
+                # (was bypassing Commander → agent_loop directly, causing mismatched replies)
+                result = await runtime.commander.handle_message(text, channel="websocket")
+                reply_text = result.get("text", "")
+                tool_calls = result.get("tool_calls") or []
+                recall = result.get("recall") or []
+                await ws.send_json(
+                    {
+                        "type": "chat.response",
+                        "payload": {
+                            "text": reply_text,
+                            "tool_calls": tool_calls,
+                            "recall_count": len(recall),
+                            "goals_updated": False,
+                            "elapsed_ms": result.get("elapsed_ms", 0),
+                            "runtime": result.get("plan", {}).get("intent", "unknown"),
+                        },
+                    }
+                )
         except WebSocketDisconnect:
             runtime.logger.info("websocket disconnected")
         except Exception as exc:

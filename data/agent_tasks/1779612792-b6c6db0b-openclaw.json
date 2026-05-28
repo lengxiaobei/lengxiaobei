@@ -1,0 +1,92 @@
+{
+  "id": "1779612792-b6c6db0b",
+  "agent_id": "openclaw",
+  "agent_name": "OpenClaw",
+  "mode": "integrated",
+  "prompt": "You are being controlled by lengxiaobei as the downstream OpenClaw agent.\n\nComplete the assigned task and return a concise result with actions taken, files changed, and blockers.\n\nTask: 让 OpenClaw 巡检通道",
+  "result": {
+    "ok": false,
+    "mode": "gateway",
+    "error": "protocol mismatch",
+    "status": {
+      "ok": true,
+      "profile": {
+        "id": "openclaw",
+        "name": "OpenClaw",
+        "root": "/Users/panhao/openclaw",
+        "kind": "gateway",
+        "capabilities": [
+          "gateway",
+          "channels",
+          "tools",
+          "plugins",
+          "devices",
+          "subagents",
+          "agent_turn"
+        ],
+        "description": "Direct Gateway integration for channel, tool, plugin, device, and multi-agent work.",
+        "callable": true
+      },
+      "state_dir": "/Users/panhao/.openclaw",
+      "gateway": {
+        "pid": 70989,
+        "port": 18789,
+        "started_at": "2026-04-14T17:55:57.585704+08:00",
+        "cli_path": "/opt/homebrew/lib/node_modules/openclaw/openclaw.mjs"
+      },
+      "default_model": {
+        "fallbacks": [
+          "bailian/qwen3.5-plus",
+          "bailian/qwen3-coder-plus",
+          "bailian/kimi-k2.5",
+          "bailian/glm-5",
+          "minimax/MiniMax-M2.7-highspeed",
+          "minimax/MiniMax-M2.7",
+          "minimax/MiniMax-M2.5-highspeed",
+          "minimax/MiniMax-M2.5",
+          "volcengine/doubao-seed-2.0-pro",
+          "volcengine/deepseek-v3.2"
+        ],
+        "primary": "volcengine/ark-code-latest"
+      },
+      "agents_count": 9,
+      "config_health": {
+        "/Users/panhao/.openclaw/openclaw.json": {
+          "lastKnownGood": {
+            "hash": "a5f1997d290c05abe6171276be44d280dee2a68806fa3300bfa793372b8a6812",
+            "bytes": 17578,
+            "mtimeMs": 1779345591964.4626,
+            "ctimeMs": 1779345591965.7246,
+            "dev": "16777233",
+            "ino": "22676605",
+            "mode": 384,
+            "nlink": 1,
+            "uid": 501,
+            "gid": 20,
+            "hasMeta": true,
+            "gatewayMode": "local",
+            "observedAt": "2026-05-21T06:41:44.531Z"
+          },
+          "lastObservedSuspiciousSignature": null,
+          "lastPromotedGood": {
+            "hash": "a5f1997d290c05abe6171276be44d280dee2a68806fa3300bfa793372b8a6812",
+            "bytes": 17578,
+            "mtimeMs": 1779345591964.4626,
+            "ctimeMs": 1779345591965.7246,
+            "dev": "16777233",
+            "ino": "22676605",
+            "mode": 33152,
+            "nlink": 1,
+            "uid": 501,
+            "gid": 20,
+            "hasMeta": true,
+            "gatewayMode": "local",
+            "observedAt": "2026-05-21T06:41:43.743Z"
+          }
+        }
+      }
+    }
+  },
+  "created_at": 1779612792.959784,
+  "inbox_path": "/Users/panhao/openclaw/lengxiaobei_inbox/1779612792-b6c6db0b.md"
+}

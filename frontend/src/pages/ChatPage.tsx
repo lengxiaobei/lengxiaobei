@@ -1,38 +1,73 @@
-import { Send } from "lucide-react";
-import { FormEvent, useState } from "react";
+import { Bot, BrainCircuit, PlugZap, RotateCcw } from "lucide-react";
+import type { ReactNode } from "react";
+import { useEffect, useRef } from "react";
+import { InputArea } from "../components/Chat/InputArea";
+import { MessageList } from "../components/Chat/MessageList";
 import { useChatStore } from "../stores/chatStore";
+import { useSystemStore } from "../stores/systemStore";
 
 export function ChatPage() {
-  const [text, setText] = useState("");
-  const { messages, sending, send } = useChatStore();
+  const { messages, sending, send, clear } = useChatStore();
+  const { status, wsConnected } = useSystemStore();
+  const logRef = useRef<HTMLDivElement>(null);
+  const hasMessages = messages.length > 0;
 
-  async function onSubmit(event: FormEvent) {
-    event.preventDefault();
-    await send(text);
-    setText("");
-  }
+  useEffect(() => {
+    logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: "smooth" });
+  }, [messages, sending]);
 
   return (
-    <section className="page">
-      <header>
-        <h1>任务会话</h1>
-        <p>Commander 负责规划，Dispatcher 负责工具调度，结果写入记忆树。</p>
-      </header>
-      <div className="chat-log">
-        {messages.length === 0 && <div className="empty">等待第一条任务</div>}
-        {messages.map((message, index) => (
-          <article key={`${message.role}-${index}`} className={`message ${message.role}`}>
-            <span>{message.role === "user" ? "你" : "冷小北"}</span>
-            <p>{message.text}</p>
-          </article>
-        ))}
-      </div>
-      <form className="composer" onSubmit={onSubmit}>
-        <input value={text} onChange={(event) => setText(event.target.value)} placeholder="输入任务或问题" />
-        <button disabled={sending} title="发送">
-          <Send size={18} />
+    <section className="page chat-page">
+      {/* Compact toolbar — title + mini status + clear */}
+      <header className="chat-toolbar">
+        <div className="chat-toolbar-left">
+          <span className="chat-toolbar-title">冷小北</span>
+          <span className="chat-toolbar-sep">·</span>
+          <StatusBadge icon={<PlugZap size={12} />} label={wsConnected ? "在线" : "离线"} ok={wsConnected} />
+          <StatusBadge icon={<BrainCircuit size={12} />} label={status?.model?.model || "…"} ok={!!status?.model?.api_key_configured} />
+        </div>
+        <button className="ghost-button ghost-button-sm" onClick={clear} title="清空消息">
+          <RotateCcw size={14} />
+          <span>清屏</span>
         </button>
-      </form>
+      </header>
+
+      {/* Chat log — takes all remaining vertical space */}
+      <div className="chat-log" ref={logRef}>
+        {!hasMessages && !sending && (
+          <div className="chat-empty">
+            <strong>和冷小北开始对话</strong>
+            <p>输入问题或任务，冷小北会用记忆、工具和技能链路来回答。</p>
+          </div>
+        )}
+        <MessageList messages={messages} />
+        {sending && (
+          <article className="message assistant pending">
+            <div className="message-meta">
+              <span>冷小北</span>
+              <time>执行中</time>
+            </div>
+            <p style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <Bot size={16} />
+              <span>
+                正在处理
+                <span style={{ opacity: 0.6 }}> · 可在「轨迹」页查看详细执行过程</span>
+              </span>
+            </p>
+          </article>
+        )}
+      </div>
+
+      <InputArea sending={sending} onSend={send} />
     </section>
+  );
+}
+
+function StatusBadge({ icon, label, ok = true }: { icon: ReactNode; label: string; ok?: boolean }) {
+  return (
+    <span className={`status-badge ${ok ? "" : "status-badge-warn"}`}>
+      {icon}
+      <span>{label}</span>
+    </span>
   );
 }

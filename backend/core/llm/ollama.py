@@ -1,25 +1,96 @@
-"""Ollama/OpenAI-compatible LLM adapter.
+"""Ollama/OpenAI-compatible/Anthropic/Xiaomi LLM adapter.
 
 参考来源：YourAgent 文档中的本地优先 LLM 集成；OpenClaw/Hermes/OpenHuman 上层都只依赖
-这个窄接口，具体供应商可替换为 Ollama、MLX 或 OpenAI-compatible API。
+这个窄接口，具体供应商可替换为 Ollama、MLX、OpenAI-compatible API、Anthropic 或 Xiaomi MiMo。
 """
 
 from __future__ import annotations
 
-import json
-import urllib.request
+from typing import Any
+
+import httpx
 
 from backend.config import get_settings
 
 
-def chat(prompt: str, system: str | None = None) -> str:
-    """Call local Ollama when available; otherwise return a deterministic local fallback."""
-    settings = get_settings()
-    if settings.llm_provider.lower() != "ollama":
-        prefix = f"系统上下文：{system}\n" if system else ""
-        return f"{prefix}当前 LLM provider={settings.llm_provider} 尚未配置适配器，已保留输入：{prompt}"
+def local_fallback(prompt: str, reason: str | None = None) -> str:
+    """Human-facing fallback used when the configured model is unavailable."""
+    compact = "".join(prompt.split())
+    if compact in {"你好", "您好", "hello", "hi"}:
+        return "你好，我是冷小北。模型服务暂时没有连上，但我还在，可以先处理系统状态、记忆、技能和工具类请求。"
+    if reason:
+        return f"模型服务这次没有返回成功，我先用本地规则把请求接住：{prompt}"
+    return f"我收到：{prompt}"
 
+
+# ── Provider registry ───────────────────────────────────────────────
+
+_SHARED_CLIENT: httpx.AsyncClient | None = None
+
+
+def _get_client() -> httpx.AsyncClient:
+    """Return a shared ``httpx.AsyncClient``, creating one on first use."""
+    global _SHARED_CLIENT
+    if _SHARED_CLIENT is None or _SHARED_CLIENT.is_closed:
+        _SHARED_CLIENT = httpx.AsyncClient(timeout=httpx.Timeout(60))
+    return _SHARED_CLIENT
+
+
+async def close_client() -> None:
+    """Close the shared HTTP client. Call during application shutdown."""
+    global _SHARED_CLIENT
+    if _SHARED_CLIENT is not None and not _SHARED_CLIENT.is_closed:
+        await _SHARED_CLIENT.aclose()
+        _SHARED_CLIENT = None
+
+
+_PROVIDER_ALIASES: dict[str, str] = {
+    "openai": "openai",
+    "openai-compatible": "openai",
+    "token-plan": "openai",
+    "ollama": "ollama",
+    "xiaomi": "openai",          # Xiaomi MiMo uses OpenAI-compatible protocol
+    "mimo": "openai",
+    "minimax": "openai",
+    "minimax-cn": "openai",
+    "anthropic": "anthropic",
+    "mimo-v2.5-pro": "openai",   # Model name as provider shortcut
+}
+
+
+def _resolve_protocol(provider: str) -> str:
+    """Map provider name to protocol handler."""
+    normalized = provider.lower().replace("_", "-")
+    return _PROVIDER_ALIASES.get(normalized, "unknown")
+
+
+async def chat(prompt: str, system: str | None = None) -> str:
+    """Call the configured chat backend; otherwise return a deterministic local fallback.
+
+    Now uses the multi-provider router for automatic fallback.
+    """
     try:
+        from backend.core.llm.router import chat as router_chat
+        return await router_chat(prompt, system=system)
+    except Exception:
+        # Fallback to direct single-provider call
+        settings = get_settings()
+        protocol = _resolve_protocol(settings.llm_provider)
+        if protocol == "openai":
+            return await _openai_compatible_chat(prompt, system=system)
+        if protocol == "anthropic":
+            return await _anthropic_chat(prompt, system=system)
+        if protocol == "ollama":
+            return await _ollama_chat(prompt, system=system)
+        return local_fallback(prompt, reason=f"provider {settings.llm_provider} is not configured")
+
+
+# ── Ollama ──────────────────────────────────────────────────────────
+
+async def _ollama_chat(prompt: str, system: str | None = None) -> str:
+    settings = get_settings()
+    try:
+        client = _get_client()
         payload = {
             "model": settings.llm_model,
             "messages": [
@@ -28,15 +99,93 @@ def chat(prompt: str, system: str | None = None) -> str:
             ],
             "stream": False,
         }
-        req = urllib.request.Request(
+        response = await client.post(
             f"{settings.llm_base_url.rstrip('/')}/api/chat",
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
+            json=payload,
         )
-        with urllib.request.urlopen(req, timeout=20) as response:
-            data = json.loads(response.read().decode("utf-8"))
+        data = response.json()
         return str((data.get("message") or {}).get("content") or data.get("response") or "")
+    except Exception:
+        return local_fallback(prompt, reason="ollama unavailable")
+
+
+# ── OpenAI-compatible (also covers Xiaomi MiMo, MiniMax, etc.) ──────
+
+async def _openai_compatible_chat(prompt: str, system: str | None = None) -> str:
+    settings = get_settings()
+    if not settings.llm_api_key:
+        return local_fallback(prompt, reason="missing api key")
+    try:
+        client = _get_client()
+        response = await client.post(
+            f"{settings.llm_base_url.rstrip('/')}/chat/completions",
+            json={
+                "model": settings.llm_model,
+                "messages": _messages(prompt, system),
+                "temperature": 0.7,
+                "max_tokens": 4096,
+            },
+            headers={"Authorization": f"Bearer {settings.llm_api_key}"},
+        )
+        data = response.json()
+        choices = data.get("choices") or []
+        if not choices:
+            error_msg = data.get("error", {}).get("message", "") if isinstance(data.get("error"), dict) else ""
+            return local_fallback(prompt, reason=f"empty model response: {error_msg}")
+        message = choices[0].get("message") or {}
+        return str(message.get("content") or choices[0].get("text") or "").strip() or local_fallback(
+            prompt, reason="empty model content"
+        )
     except Exception as exc:
-        prefix = f"系统上下文：{system}\n" if system else ""
-        return f"{prefix}当前本地 Ollama 不可用，已保留输入用于后续处理：{prompt}\n原因：{exc}"
+        return local_fallback(prompt, reason=f"openai-compatible backend unavailable: {exc}")
+
+
+# ── Anthropic protocol ──────────────────────────────────────────────
+
+async def _anthropic_chat(prompt: str, system: str | None = None) -> str:
+    """Call Anthropic Messages API (/v1/messages)."""
+    settings = get_settings()
+    if not settings.llm_api_key:
+        return local_fallback(prompt, reason="missing anthropic api key")
+
+    base_url = settings.llm_base_url.rstrip("/")
+    # Support both direct Anthropic and proxy endpoints
+    if "/v1/messages" not in base_url:
+        url = f"{base_url}/v1/messages"
+    else:
+        url = base_url
+
+    headers = {
+        "x-api-key": settings.llm_api_key,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+    }
+    body: dict[str, Any] = {
+        "model": settings.llm_model,
+        "max_tokens": 4096,
+        "messages": [{"role": "user", "content": prompt}],
+    }
+    if system:
+        body["system"] = system
+
+    try:
+        client = _get_client()
+        response = await client.post(url, json=body, headers=headers)
+        data = response.json()
+
+        # Anthropic response format
+        content_blocks = data.get("content") or []
+        text_parts = [block.get("text", "") for block in content_blocks if block.get("type") == "text"]
+        result = "\n".join(text_parts).strip()
+        return result or local_fallback(prompt, reason="empty anthropic response")
+    except Exception as exc:
+        return local_fallback(prompt, reason=f"anthropic backend unavailable: {exc}")
+
+
+# ── Helpers ─────────────────────────────────────────────────────────
+
+def _messages(prompt: str, system: str | None = None) -> list[dict[str, str]]:
+    return [
+        *([{"role": "system", "content": system}] if system else []),
+        {"role": "user", "content": prompt},
+    ]

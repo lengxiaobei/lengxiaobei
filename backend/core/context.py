@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 
-@dataclass(slots=True)
+@dataclass
 class RuntimeEvent:
     """轻量事件对象，参考 OpenClaw event bus 与 Hermes 轨迹记录。"""
 
@@ -22,7 +22,7 @@ class RuntimeEvent:
     ts: float
 
 
-@dataclass(slots=True)
+@dataclass
 class RuntimeContext:
     """应用级依赖容器。
 
@@ -40,12 +40,32 @@ class RuntimeContext:
     tools: Any
     dispatcher: Any
     commander: Any
+    autonomy: Any
     reflector: Any
     skill_store: Any
     scheduler: Any
+    burn: Any
     started_at: float
     logger: Any
+    llm_router: Any = None
+    mcp_manager: Any = None
+    memory_hooks: Any = None
+    session_manager: Any = None
+    skill_loader: Any = None
+    agent_loop: Any = None
+    brain_hooks: Any = None
+    context_compressor: Any = None
+    fact_extractor: Any = None
+    review_engine: Any = None
+    last_activity_at: float = 0.0
     events: list[RuntimeEvent] = field(default_factory=list)
+
+    def touch_activity(self, source: str = "user") -> None:
+        """记录用户/通道活跃时间，供自主调度 idle 门控使用。"""
+        import time
+
+        self.last_activity_at = time.time()
+        self.emit("runtime.activity", {"source": source})
 
     def emit(self, event_type: str, payload: dict[str, Any]) -> RuntimeEvent:
         """记录内部事件，参考 Hermes 执行轨迹与 OpenClaw 网关事件流。"""
