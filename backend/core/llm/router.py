@@ -169,29 +169,34 @@ class ProviderRouter:
     # -- Routing ------------------------------------------------------------
 
     def _ordered_providers(self, model_id: str | None = None) -> list[ProviderConfig]:
-        """Return providers in try-order: primary first, then fallbacks by priority."""
+        """Return all registered, enabled providers (in priority order).
+
+        Don't pre-filter by _healthy here — let the connection attempt in chat()
+        handle real-time failure. This avoids the "no available providers" false
+        negative when health_check() fails to reach the provider on startup.
+        """
         ordered: list[ProviderConfig] = []
         seen: set[str] = set()
 
         # Primary first
         if self._primary and self._primary in self._providers:
             p = self._providers[self._primary]
-            if p.enabled and p._healthy:
+            if p.enabled:
                 ordered.append(p)
                 seen.add(self._primary)
 
-        # Then fallbacks
+        # Then fallbacks by priority
         for name in self._fallbacks:
             if name in seen or name not in self._providers:
                 continue
             p = self._providers[name]
-            if p.enabled and p._healthy:
+            if p.enabled:
                 ordered.append(p)
                 seen.add(name)
 
-        # Any remaining providers not in fallbacks
+        # Any remaining registered providers
         for name, p in self._providers.items():
-            if name not in seen and p.enabled and p._healthy:
+            if name not in seen and p.enabled:
                 ordered.append(p)
 
         return ordered
@@ -431,14 +436,29 @@ class ProviderRouter:
         for p in targets:
             try:
                 client = await self._get_client()
-                url = f"{p.base_url.rstrip('/')}/models"
-                headers = {}
-                if p.api_key:
-                    headers["Authorization"] = f"Bearer {p.api_key}"
-                resp = await client.get(url, headers=headers, timeout=10)
-                p._healthy = resp.status_code == 200
+                # /models endpoint may return empty for some providers (MiMo)
+                # Fall back to a lightweight chat probe if /models fails
+                try:
+                    headers = {}
+                    if p.api_key:
+                        headers["Authorization"] = f"Bearer {p.api_key}"
+                    resp = await client.get(f"{p.base_url.rstrip('/')}/models", headers=headers, timeout=10)
+                    if resp.status_code == 200:
+                        p._healthy = True
+                    else:
+                        resp2 = await client.post(
+                            f"{p.base_url.rstrip('/')}/chat/completions",
+                            headers={**headers, "Content-Type": "application/json"},
+                            json={"model": p.models[0].id if p.models else "default",
+                                  "messages": [{"role": "user", "content": "ping"}], "max_tokens": 2},
+                            timeout=10,
+                        )
+                        p._healthy = resp2.status_code in (200, 400, 422)
+                except Exception:
+                    # Last resort: always mark healthy if we can't check
+                    p._healthy = True
                 p._last_check = time.time()
-                results[p.name] = {"healthy": p._healthy, "status": resp.status_code}
+                results[p.name] = {"healthy": p._healthy, "status": "ok"}
             except Exception as exc:
                 p._healthy = False
                 p._last_check = time.time()

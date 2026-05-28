@@ -58,13 +58,26 @@ def cosine(a: list[float], b: list[float]) -> float:
 class VectorStore:
     """可替换的向量检索门面，内建 embedding 缓存避免重复编码。"""
 
-    def __init__(self, memory_tree: Any, sqlite: Any | None = None, persist_dir: str | None = None):
+    def __init__(
+        self,
+        memory_tree: Any,
+        sqlite: Any | None = None,
+        persist_dir: str | None = None,
+        pre_filter_min_candidates: int = 5,
+    ):
         self.memory_tree = memory_tree
         self.sqlite = sqlite or getattr(memory_tree, "sqlite", None)
         self.embedding = HashEmbedding()
         self.chroma = self._try_chroma(persist_dir)
         # In-memory cache: node_id -> (embedding, cached_at)
         self._cache: dict[str, tuple[list[float], float]] = {}
+        # Minimum keyword-match candidates required to skip full scan.
+        # If keyword pre-filtering returns fewer than this many nodes
+        # the search falls back to a full vector scan for quality.
+        self.pre_filter_min_candidates = pre_filter_min_candidates
+        # Cache for the most recent query embedding to avoid re-encoding
+        # when the same query is searched multiple times in quick succession.
+        self._query_embedding_cache: tuple[str, list[float]] | None = None
 
     def index_node(self, node: dict[str, Any]) -> dict[str, Any]:
         """为记忆节点生成 embedding；Chroma 可用时同步写入 Chroma。"""
@@ -99,7 +112,15 @@ class VectorStore:
         query = (query or "").strip()
         if not query:
             return self.memory_tree.list_recent(limit=limit)
-        qvec = self.embedding.encode(query)
+
+        # Cache the query embedding so repeated searches with the same
+        # query don't re-encode (the HashEmbedding.encode call is cheap
+        # but this guards against more expensive future encoders).
+        if self._query_embedding_cache and self._query_embedding_cache[0] == query:
+            qvec = self._query_embedding_cache[1]
+        else:
+            qvec = self.embedding.encode(query)
+            self._query_embedding_cache = (query, qvec)
 
         # Chroma path
         if self.chroma:
@@ -120,7 +141,24 @@ class VectorStore:
     def _search_with_stored_embeddings(
         self, qvec: list[float], query: str, limit: int
     ) -> list[dict[str, Any]]:
-        """Search using embeddings stored in SQLite, with incremental loading."""
+        """Search using embeddings stored in SQLite.
+
+        Optimisation: a keyword-based pre-filter narrows the candidate set
+        before the O(n) cosine similarity pass.  When the pre-filter returns
+        fewer than *pre_filter_min_candidates* nodes the method falls back
+        to a full scan so that result quality is not compromised.
+        """
+        # -- Fast path: keyword pre-filtering ----------------------------
+        candidates = self._keyword_pre_filter(query, limit)
+        if candidates is not None:
+            logger.debug(
+                "Keyword pre-filter returned %d candidates for query %r",
+                len(candidates), query,
+            )
+            return self._score_candidates(qvec, query, candidates, limit)
+
+        # -- Slow path: full scan with incremental loading ---------------
+        logger.debug("Pre-filter returned too few candidates; falling back to full scan")
         scored: list[tuple[float, dict[str, Any]]] = []
         query_lower = query.lower()
         offset = 0
@@ -145,6 +183,68 @@ class VectorStore:
             # Early termination: if we have enough high-scoring results
             if len(scored) >= limit * 5:
                 break
+
+        scored.sort(key=lambda item: item[0], reverse=True)
+        results = []
+        for score, node in scored[:limit]:
+            item = dict(node)
+            item["score"] = round(float(score), 4)
+            item["vector_backend"] = "hash"
+            results.append(item)
+        return results
+
+    # ------------------------------------------------------------------
+    # Keyword pre-filter helpers
+    # ------------------------------------------------------------------
+
+    def _keyword_pre_filter(
+        self, query: str, limit: int
+    ) -> list[dict[str, Any]] | None:
+        """Return candidate nodes via keyword search, or *None* to signal
+        that the caller should fall back to a full vector scan.
+
+        Keywords are extracted by splitting on whitespace and discarding
+        tokens shorter than 2 characters.  If the SQLite backend does not
+        expose ``search_memory_nodes_by_keywords`` the method returns
+        *None* immediately.
+        """
+        if not hasattr(self.sqlite, "search_memory_nodes_by_keywords"):
+            return None
+
+        keywords = [w for w in query.split() if len(w) >= 2]
+        if not keywords:
+            return None
+
+        # Request more candidates than *limit* to give the vector
+        # re-ranking step a broader pool to work with.
+        candidates = self.sqlite.search_memory_nodes_by_keywords(
+            keywords, limit=max(limit * 5, 50)
+        )
+
+        if len(candidates) < self.pre_filter_min_candidates:
+            return None
+
+        return candidates
+
+    def _score_candidates(
+        self,
+        qvec: list[float],
+        query: str,
+        candidates: list[dict[str, Any]],
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        """Compute cosine similarity for a pre-filtered candidate set and
+        return the top *limit* results sorted by descending score."""
+        query_lower = query.lower()
+        scored: list[tuple[float, dict[str, Any]]] = []
+
+        for node in candidates:
+            node_id = str(node.get("id") or "")
+            embedding = self._get_embedding(node_id, node)
+            score = cosine(qvec, embedding)
+            if query_lower in self._node_text(node).lower():
+                score += 0.25
+            scored.append((score, node))
 
         scored.sort(key=lambda item: item[0], reverse=True)
         results = []

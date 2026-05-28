@@ -1,4 +1,4 @@
-import { Bot, BrainCircuit, Database, PlugZap, RotateCcw, Sparkles } from "lucide-react";
+import { Bot, BrainCircuit, PlugZap, RotateCcw } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useRef } from "react";
 import { InputArea } from "../components/Chat/InputArea";
@@ -6,17 +6,11 @@ import { MessageList } from "../components/Chat/MessageList";
 import { useChatStore } from "../stores/chatStore";
 import { useSystemStore } from "../stores/systemStore";
 
-const suggestions = [
-  "检查冷小北现在能做什么",
-  "定位并修复最近一次失败，完成后运行验证",
-  "把这段对话整理进长期记忆",
-  "找一个最小改进点并自己验证"
-];
-
 export function ChatPage() {
   const { messages, sending, send, clear } = useChatStore();
   const { status, wsConnected } = useSystemStore();
   const logRef = useRef<HTMLDivElement>(null);
+  const hasMessages = messages.length > 0;
 
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: "smooth" });
@@ -24,59 +18,56 @@ export function ChatPage() {
 
   return (
     <section className="page chat-page">
-      <header className="chat-header">
-        <div>
-          <span className="eyebrow">LENGXIAOBEI MISSION DECK</span>
-          <h1>冷小北任务中枢</h1>
-          <p>把意图交给冷小北，由它自己的通道、记忆、反思、技能和工具链路完成任务。</p>
+      {/* Compact toolbar — title + mini status + clear */}
+      <header className="chat-toolbar">
+        <div className="chat-toolbar-left">
+          <span className="chat-toolbar-title">冷小北</span>
+          <span className="chat-toolbar-sep">·</span>
+          <StatusBadge icon={<PlugZap size={12} />} label={wsConnected ? "在线" : "离线"} ok={wsConnected} />
+          <StatusBadge icon={<BrainCircuit size={12} />} label={status?.model?.model || "…"} ok={!!status?.model?.api_key_configured} />
         </div>
-        <button className="ghost-button" onClick={clear} title="清空当前界面消息">
-          <RotateCcw size={16} />
+        <button className="ghost-button ghost-button-sm" onClick={clear} title="清空消息">
+          <RotateCcw size={14} />
           <span>清屏</span>
         </button>
       </header>
-      <div className="home-status">
-        <StatusTile icon={<PlugZap size={18} />} label="连接" value={wsConnected ? "实时在线" : status?.status === "running" ? "HTTP 在线" : "连接中"} tone={wsConnected ? "ok" : "warn"} />
-        <StatusTile
-          icon={<BrainCircuit size={18} />}
-          label="模型"
-          value={status?.model?.model || "读取中"}
-          detail={status?.model ? (status.model.api_key_configured ? status.model.provider : "缺少 API Key") : "等待后端状态"}
-          tone={status?.model ? (status.model.api_key_configured ? "ok" : "bad") : "neutral"}
-        />
-        <StatusTile icon={<Database size={18} />} label="自治" value={String(status?.autonomy?.last_goal || "待运行")} detail={status?.autonomy?.run_count ? `${status.autonomy.run_count} 轮` : "尚无记录"} tone="neutral" />
-      </div>
+
+      {/* Chat log — takes all remaining vertical space */}
       <div className="chat-log" ref={logRef}>
+        {!hasMessages && !sending && (
+          <div className="chat-empty">
+            <strong>和冷小北开始对话</strong>
+            <p>输入问题或任务，冷小北会用记忆、工具和技能链路来回答。</p>
+          </div>
+        )}
         <MessageList messages={messages} />
         {sending && (
           <article className="message assistant pending">
             <div className="message-meta">
               <span>冷小北</span>
-              <time>思考中</time>
+              <time>执行中</time>
             </div>
-            <p><Bot size={16} /> 正在组织回复...</p>
+            <p style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <Bot size={16} />
+              <span>
+                正在处理
+                <span style={{ opacity: 0.6 }}> · 可在「轨迹」页查看详细执行过程</span>
+              </span>
+            </p>
           </article>
         )}
       </div>
-      <div className="prompt-strip">
-        <Sparkles size={15} />
-        {suggestions.map((item) => (
-          <button key={item} type="button" onClick={() => send(item)} disabled={sending}>
-            {item}
-          </button>
-        ))}
-      </div>
+
       <InputArea sending={sending} onSend={send} />
     </section>
   );
 }
 
-function StatusTile({ icon, label, value, detail, tone = "neutral" }: { icon: ReactNode; label: string; value: string; detail?: string; tone?: "ok" | "warn" | "bad" | "neutral" }) {
+function StatusBadge({ icon, label, ok = true }: { icon: ReactNode; label: string; ok?: boolean }) {
   return (
-    <article className={`status-tile ${tone}`}>
-      <div>{icon}<span>{label}</span></div>
-      <strong>{value}</strong>
-      {detail && <small>{detail}</small>}
-    </article>
+    <span className={`status-badge ${ok ? "" : "status-badge-warn"}`}>
+      {icon}
+      <span>{label}</span>
+    </span>
   );
 }

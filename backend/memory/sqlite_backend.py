@@ -57,7 +57,11 @@ class MemoryNode:
 
 
 class SQLiteMemoryBackend:
-    """SQLite-backed memory store with keyword + recency recall."""
+    """Thin wrapper that delegates to :class:`SQLiteBackend`.
+
+    Preserves the legacy public API used by AgentLoop and other callers
+    while sharing the richer ``memory_nodes`` schema from ``SQLiteBackend``.
+    """
 
     def __init__(self, db_path: str | Path | None = None) -> None:
         if db_path is None:
@@ -66,39 +70,61 @@ class SQLiteMemoryBackend:
             db_path = Path(PROJECT_ROOT) / "data" / "memory.db"
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        if sqlite_utils is None:
-            raise RuntimeError("SQLiteMemoryBackend requires sqlite-utils; install sqlite-utils>=3.36")
-        self.db = sqlite_utils.Database(self.db_path)
+        # Delegate all storage to the richer backend
+        self._backend = SQLiteBackend(self.db_path)
+        # Ensure legacy flat nodes table still exists for any old data
         self._ensure_tables()
 
+    # -- internal helpers -------------------------------------------------
+
     def _ensure_tables(self) -> None:
-        """Create tables if they don't exist."""
-        if "nodes" not in self.db.table_names():
-            self.db["nodes"].insert(
-                {
-                    "id": 0,
-                    "content": "",
-                    "node_type": "",
-                    "metadata_json": "{}",
-                    "summary": "",
-                    "created_at": 0.0,
-                    "updated_at": 0.0,
-                },
-                pk="id",
-                replace=True,
-            )
-            self.db["nodes"].transform(drop={"id"})  # auto-increment
-            self.db.execute(
-                "CREATE INDEX IF NOT EXISTS idx_nodes_type ON nodes(node_type)"
-            )
-            self.db.execute(
-                "CREATE INDEX IF NOT EXISTS idx_nodes_created ON nodes(created_at)"
+        """Create the legacy ``nodes`` table if it does not already exist."""
+        with self._backend.connect() as conn:
+            conn.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS nodes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    content TEXT,
+                    node_type TEXT,
+                    metadata_json TEXT DEFAULT '{}',
+                    summary TEXT,
+                    created_at REAL,
+                    updated_at REAL
+                );
+                CREATE INDEX IF NOT EXISTS idx_nodes_type ON nodes(node_type);
+                CREATE INDEX IF NOT EXISTS idx_nodes_created ON nodes(created_at);
+                """
             )
 
-    def _query(self, sql: str, params: tuple = ()) -> list[dict[str, Any]]:
-        return self.db.execute_returning_dicts(sql, params)
+    @staticmethod
+    def _to_flat_format(record: dict[str, Any] | None) -> dict[str, Any] | None:
+        """Convert a ``memory_nodes`` record to the legacy flat dict shape.
 
-    # ── Write ─────────────────────────────────────────────────────────
+        The returned dict mirrors the old ``MemoryNode.to_dict()`` output::
+
+            {id, content, node_type, metadata, summary, created_at, updated_at}
+        """
+        if record is None:
+            return None
+        metadata = record.get("metadata")
+        if isinstance(metadata, str):
+            try:
+                metadata = json.loads(metadata)
+            except (TypeError, json.JSONDecodeError):
+                metadata = {}
+        elif metadata is None:
+            metadata = {}
+        return {
+            "id": record.get("id"),
+            "content": record.get("content", ""),
+            "node_type": record.get("type", ""),
+            "metadata": metadata,
+            "summary": record.get("summary", ""),
+            "created_at": record.get("created_at", 0.0),
+            "updated_at": record.get("updated_at", 0.0),
+        }
+
+    # -- Write ------------------------------------------------------------
 
     def add_node(
         self,
@@ -108,55 +134,37 @@ class SQLiteMemoryBackend:
         summary: str = "",
         created_at: float | None = None,
     ) -> dict[str, Any]:
-        """Insert a new memory node. Returns the created node dict."""
-        now = created_at or time.time()
-        node = MemoryNode(
-            id=None,
+        """Insert a new memory node.  Returns the created node in flat format."""
+        result = self._backend.insert_memory_node(
             content=content,
             node_type=node_type,
-            metadata_json=json.dumps(metadata or {}, ensure_ascii=False),
+            metadata=metadata,
             summary=summary or content[:120],
-            created_at=now,
-            updated_at=now,
         )
-        self.db["nodes"].insert(node.__dict__, pk="id")
-        new_id = node.__dict__["id"]
-        return self.get_node(new_id)
+        return self._to_flat_format(result) or {}
 
-    def get_node(self, node_id: int) -> dict[str, Any] | None:
-        try:
-            row = self.db["nodes"].get(node_id)
-            return MemoryNode.from_row(row).to_dict()
-        except (KeyError, IndexError, _sqlite_utils_not_found_error()):
-            return None
+    def get_node(self, node_id: int | str) -> dict[str, Any] | None:
+        return self._to_flat_format(self._backend.get_memory_node(node_id))
 
-    def update_node(self, node_id: int, **fields: Any) -> dict[str, Any] | None:
-        """Update specified fields on a node."""
-        try:
-            existing = self.get_node(node_id)
-            if existing is None:
-                return None
-            updates: dict[str, Any] = {"updated_at": time.time()}
-            for key in ("content", "node_type", "summary"):
-                if key in fields:
-                    updates[key] = fields[key]
-            if "metadata" in fields:
-                updates["metadata_json"] = json.dumps(fields["metadata"], ensure_ascii=False)
-            if not updates:
-                return existing
-            self.db["nodes"].update(node_id, updates)
+    def update_node(self, node_id: int | str, **fields: Any) -> dict[str, Any] | None:
+        """Update specified fields on a node, mapping legacy field names."""
+        changes: dict[str, Any] = {}
+        for key in ("content", "summary"):
+            if key in fields:
+                changes[key] = fields[key]
+        if "node_type" in fields:
+            changes["type"] = fields["node_type"]
+        if "metadata" in fields:
+            changes["metadata"] = fields["metadata"]
+        if not changes:
             return self.get_node(node_id)
-        except (KeyError, IndexError, _sqlite_utils_not_found_error()):
-            return None
+        result = self._backend.update_memory_node(node_id, **changes)
+        return self._to_flat_format(result)
 
-    def delete_node(self, node_id: int) -> bool:
-        try:
-            self.db["nodes"].delete_where("id = ?", [node_id])
-            return True
-        except Exception:
-            return False
+    def delete_node(self, node_id: int | str) -> bool:
+        return self._backend.delete_memory_node(node_id)
 
-    # ── Search ────────────────────────────────────────────────────────
+    # -- Search -----------------------------------------------------------
 
     def search(
         self,
@@ -164,85 +172,106 @@ class SQLiteMemoryBackend:
         limit: int = 8,
         node_types: list[str] | None = None,
     ) -> list[dict[str, Any]]:
-        """Keyword + recency search. Returns most recent matching nodes."""
-        if node_types:
-            placeholders = ", ".join("?" * len(node_types))
-            sql = f"""
-                SELECT * FROM nodes
-                WHERE content LIKE ? AND node_type IN ({placeholders})
-                ORDER BY created_at DESC LIMIT ?
-            """
-            params = (f"%{query}%", *node_types, limit)
-        else:
-            sql = """
-                SELECT * FROM nodes
-                WHERE content LIKE ?
-                ORDER BY created_at DESC LIMIT ?
-            """
-            params = (f"%{query}%", limit)
-        rows = self._query(sql, params)
-        return [MemoryNode.from_row(r).to_dict() for r in rows]
+        """Keyword + recency search.  Returns most recent matching nodes."""
+        query = (query or "").strip()
+        with self._backend.connect() as conn:
+            if node_types:
+                placeholders = ", ".join("?" * len(node_types))
+                sql = (
+                    f"SELECT * FROM memory_nodes"
+                    f" WHERE (content LIKE ? OR summary LIKE ? OR path LIKE ? OR metadata LIKE ?)"
+                    f" AND type IN ({placeholders})"
+                    f" ORDER BY updated_at DESC LIMIT ?"
+                )
+                like = f"%{query}%"
+                params: tuple = (like, like, like, like, *node_types, limit)
+            else:
+                sql = (
+                    "SELECT * FROM memory_nodes"
+                    " WHERE content LIKE ? OR summary LIKE ? OR path LIKE ? OR metadata LIKE ?"
+                    " ORDER BY updated_at DESC LIMIT ?"
+                )
+                like = f"%{query}%"
+                params = (like, like, like, like, limit)
+            rows = conn.execute(sql, params).fetchall()
+        return [self._to_flat_format(dict(r)) for r in rows]
 
-    def list_recent(self, limit: int = 20, node_types: list[str] | None = None) -> list[dict[str, Any]]:
+    def list_recent(
+        self, limit: int = 20, node_types: list[str] | None = None
+    ) -> list[dict[str, Any]]:
         """Return the most recent memory nodes."""
         if node_types:
-            placeholders = ", ".join("?" * len(node_types))
-            sql = f"SELECT * FROM nodes WHERE node_type IN ({placeholders}) ORDER BY created_at DESC LIMIT ?"
-            params = (*node_types, limit)
-        else:
-            sql = "SELECT * FROM nodes ORDER BY created_at DESC LIMIT ?"
-            params = (limit,)
-        rows = self._query(sql, params)
-        return [MemoryNode.from_row(r).to_dict() for r in rows]
+            with self._backend.connect() as conn:
+                placeholders = ", ".join("?" * len(node_types))
+                rows = conn.execute(
+                    f"SELECT * FROM memory_nodes WHERE type IN ({placeholders})"
+                    f" ORDER BY updated_at DESC LIMIT ?",
+                    (*node_types, limit),
+                ).fetchall()
+            return [self._to_flat_format(dict(r)) for r in rows]
+        results = self._backend.list_memory_nodes(limit=limit)
+        return [self._to_flat_format(r) for r in results]
 
     def get_context_window(self, before_ts: float, limit: int = 30) -> list[dict[str, Any]]:
         """Get recent nodes before a given timestamp for context building."""
-        sql = "SELECT * FROM nodes WHERE created_at < ? ORDER BY created_at DESC LIMIT ?"
-        rows = self._query(sql, (before_ts, limit))
-        return [MemoryNode.from_row(r).to_dict() for r in rows]
+        with self._backend.connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM memory_nodes WHERE created_at < ? ORDER BY created_at DESC LIMIT ?",
+                (before_ts, limit),
+            ).fetchall()
+        return [self._to_flat_format(dict(r)) for r in rows]
 
     def count(self, node_type: str | None = None) -> int:
-        if node_type:
-            sql = "SELECT COUNT(*) as c FROM nodes WHERE node_type = ?"
-            rows = self._query(sql, (node_type,))
-        else:
-            sql = "SELECT COUNT(*) as c FROM nodes"
-            rows = self._query(sql)
-        return rows[0]["c"]
+        with self._backend.connect() as conn:
+            if node_type:
+                row = conn.execute(
+                    "SELECT COUNT(*) as c FROM memory_nodes WHERE type = ?", (node_type,)
+                ).fetchone()
+            else:
+                row = conn.execute("SELECT COUNT(*) as c FROM memory_nodes").fetchone()
+        return row["c"] if row else 0
 
     def iter_nodes(
         self, node_type: str | None = None, batch_size: int = 100
     ) -> Iterator[dict[str, Any]]:
-        """Yield all nodes, optionally filtered by type. For batch processing."""
+        """Yield all nodes, optionally filtered by type.  For batch processing."""
         offset = 0
         while True:
-            if node_type:
-                sql = "SELECT * FROM nodes WHERE node_type = ? ORDER BY created_at DESC LIMIT ? OFFSET ?"
-                params = (node_type, batch_size, offset)
-            else:
-                sql = "SELECT * FROM nodes ORDER BY created_at DESC LIMIT ? OFFSET ?"
-                params = (batch_size, offset)
-            rows = self._query(sql, params)
+            with self._backend.connect() as conn:
+                if node_type:
+                    rows = conn.execute(
+                        "SELECT * FROM memory_nodes WHERE type = ?"
+                        " ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                        (node_type, batch_size, offset),
+                    ).fetchall()
+                else:
+                    rows = conn.execute(
+                        "SELECT * FROM memory_nodes ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                        (batch_size, offset),
+                    ).fetchall()
             if not rows:
                 break
             for row in rows:
-                yield MemoryNode.from_row(row).to_dict()
-            offset += batch_size
+                yield self._to_flat_format(dict(row))
             if len(rows) < batch_size:
                 break
+            offset += batch_size
 
-    # ── Maintenance ────────────────────────────────────────────────────
+    # -- Maintenance ------------------------------------------------------
 
     def prune(self, keep_count: int = 5000) -> int:
-        """Remove oldest nodes beyond keep_count. Returns count removed."""
+        """Remove oldest nodes beyond *keep_count*.  Returns count removed."""
         total = self.count()
         if total <= keep_count:
             return 0
         to_remove = total - keep_count
-        sql = "SELECT id FROM nodes ORDER BY created_at ASC LIMIT ?"
-        rows = self._query(sql, (to_remove,))
-        for row in rows:
-            self.db["nodes"].delete_where("id = ?", [row["id"]])
+        with self._backend.connect() as conn:
+            rows = conn.execute(
+                "SELECT id FROM memory_nodes ORDER BY created_at ASC LIMIT ?",
+                (to_remove,),
+            ).fetchall()
+            for row in rows:
+                conn.execute("DELETE FROM memory_nodes WHERE id = ?", (row["id"],))
         return len(rows)
 
 
@@ -304,9 +333,25 @@ class SQLiteBackend:
                     status TEXT NOT NULL,
                     success_count INTEGER DEFAULT 0,
                     fail_count INTEGER DEFAULT 0,
+                    version INTEGER DEFAULT 1,
+                    source_run_id TEXT,
+                    last_used_at REAL,
                     created_at REAL NOT NULL,
                     updated_at REAL NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS failure_patterns (
+                    id TEXT PRIMARY KEY,
+                    pattern TEXT NOT NULL,
+                    tool TEXT,
+                    error_signature TEXT NOT NULL,
+                    occurrence_count INTEGER DEFAULT 1,
+                    first_seen_at REAL NOT NULL,
+                    last_seen_at REAL NOT NULL,
+                    resolution TEXT,
+                    resolved INTEGER DEFAULT 0
+                );
+                CREATE INDEX IF NOT EXISTS idx_failure_patterns_tool ON failure_patterns(tool);
+                CREATE INDEX IF NOT EXISTS idx_failure_patterns_resolved ON failure_patterns(resolved);
                 CREATE TABLE IF NOT EXISTS tool_traces (
                     id TEXT PRIMARY KEY,
                     tool TEXT NOT NULL,
@@ -338,8 +383,84 @@ class SQLiteBackend:
                     status TEXT NOT NULL,
                     detail TEXT
                 );
+                -- Trace tables for agent observability (Phase 1)
+                CREATE TABLE IF NOT EXISTS agent_runs (
+                    id TEXT PRIMARY KEY,
+                    user_message TEXT NOT NULL,
+                    channel TEXT NOT NULL DEFAULT 'web',
+                    status TEXT NOT NULL DEFAULT 'running',
+                    final_reply TEXT,
+                    total_tool_calls INTEGER DEFAULT 0,
+                    total_steps INTEGER DEFAULT 0,
+                    elapsed_ms REAL DEFAULT 0,
+                    created_at REAL NOT NULL,
+                    finished_at REAL
+                );
+                CREATE INDEX IF NOT EXISTS idx_agent_runs_created ON agent_runs(created_at);
+                CREATE INDEX IF NOT EXISTS idx_agent_runs_status ON agent_runs(status);
+
+                CREATE TABLE IF NOT EXISTS agent_steps (
+                    id TEXT PRIMARY KEY,
+                    run_id TEXT NOT NULL,
+                    step_index INTEGER NOT NULL,
+                    phase TEXT NOT NULL,
+                    llm_input_tokens INTEGER DEFAULT 0,
+                    llm_output_tokens INTEGER DEFAULT 0,
+                    tool_calls_count INTEGER DEFAULT 0,
+                    summary TEXT,
+                    elapsed_ms REAL DEFAULT 0,
+                    created_at REAL NOT NULL,
+                    FOREIGN KEY (run_id) REFERENCES agent_runs(id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_agent_steps_run ON agent_steps(run_id);
+
+                CREATE TABLE IF NOT EXISTS tool_calls (
+                    id TEXT PRIMARY KEY,
+                    run_id TEXT NOT NULL,
+                    step_id TEXT,
+                    tool TEXT NOT NULL,
+                    args TEXT NOT NULL,
+                    result TEXT,
+                    error TEXT,
+                    ok INTEGER NOT NULL DEFAULT 1,
+                    elapsed_ms REAL DEFAULT 0,
+                    created_at REAL NOT NULL,
+                    FOREIGN KEY (run_id) REFERENCES agent_runs(id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_tool_calls_run ON tool_calls(run_id);
+
+                CREATE TABLE IF NOT EXISTS reflections (
+                    id TEXT PRIMARY KEY,
+                    run_id TEXT NOT NULL,
+                    kind TEXT NOT NULL DEFAULT 'auto',
+                    trigger TEXT,
+                    diagnosis TEXT NOT NULL,
+                    lesson TEXT,
+                    skill_generated TEXT,
+                    created_at REAL NOT NULL,
+                    FOREIGN KEY (run_id) REFERENCES agent_runs(id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_reflections_run ON reflections(run_id);
                 """
             )
+            # Migration: add columns to existing skills table if missing
+            self._migrate_skills_table(conn)
+
+    def _migrate_skills_table(self, conn: sqlite3.Connection) -> None:
+        """Add new columns to skills table if they don't exist."""
+        cursor = conn.execute("PRAGMA table_info(skills)")
+        existing = {row[1] for row in cursor.fetchall()}
+        migrations = [
+            ("version", "INTEGER DEFAULT 1"),
+            ("source_run_id", "TEXT"),
+            ("last_used_at", "REAL"),
+        ]
+        for col_name, col_type in migrations:
+            if col_name not in existing:
+                try:
+                    conn.execute(f"ALTER TABLE skills ADD COLUMN {col_name} {col_type}")
+                except Exception:
+                    pass  # Column may already exist from concurrent migration
 
     def insert_memory_node(
         self,
@@ -455,6 +576,34 @@ class SQLiteBackend:
                 ).fetchall()
         return [self._decode_memory_row(row) for row in rows]
 
+    def search_memory_nodes_by_keywords(
+        self, keywords: list[str], limit: int = 50
+    ) -> list[dict[str, Any]]:
+        """Search memory nodes matching ANY of the given keywords.
+
+        Used by VectorStore for keyword-based pre-filtering before
+        vector similarity computation.  Each keyword is matched with
+        LIKE against *content*, *summary*, and *path*.
+        """
+        if not keywords:
+            return []
+        conditions: list[str] = []
+        params: list[Any] = []
+        for kw in keywords:
+            like = f"%{kw}%"
+            conditions.append("(content LIKE ? OR summary LIKE ? OR path LIKE ?)")
+            params.extend([like, like, like])
+        where_clause = " OR ".join(conditions)
+        sql = (
+            f"SELECT DISTINCT * FROM memory_nodes "
+            f"WHERE {where_clause} "
+            f"ORDER BY updated_at DESC LIMIT ?"
+        )
+        params.append(limit)
+        with self.connect() as conn:
+            rows = conn.execute(sql, params).fetchall()
+        return [self._decode_memory_row(row) for row in rows]
+
     def memory_tree(self, root_id: str | None = None, limit: int = 500) -> list[dict[str, Any]]:
         with self.connect() as conn:
             if root_id:
@@ -475,15 +624,12 @@ class SQLiteBackend:
         skill_id = uuid.uuid5(uuid.NAMESPACE_URL, name).hex
         payload = json.dumps(body, ensure_ascii=False)
         with self.connect() as conn:
+            # Delete-then-insert to avoid ON CONFLICT issues with older schemas
+            conn.execute("DELETE FROM skills WHERE name = ?", (name,))
             conn.execute(
                 """
                 INSERT INTO skills (id, name, trigger, body, status, success_count, fail_count, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?)
-                ON CONFLICT(name) DO UPDATE SET
-                    trigger=excluded.trigger,
-                    body=excluded.body,
-                    status=excluded.status,
-                    updated_at=excluded.updated_at
                 """,
                 (skill_id, name, trigger, payload, status, now, now),
             )
@@ -505,7 +651,128 @@ class SQLiteBackend:
     def record_skill_result(self, name: str, ok: bool) -> None:
         field = "success_count" if ok else "fail_count"
         with self.connect() as conn:
-            conn.execute(f"UPDATE skills SET {field}={field}+1, updated_at=? WHERE name=?", (time.time(), name))
+            conn.execute(
+                f"UPDATE skills SET {field}={field}+1, last_used_at=?, updated_at=? WHERE name=?",
+                (time.time(), time.time(), name),
+            )
+
+    def get_skill_stats(self, name: str) -> dict[str, Any] | None:
+        """Get skill with calculated success rate."""
+        with self.connect() as conn:
+            row = conn.execute("SELECT * FROM skills WHERE name=?", (name,)).fetchone()
+        if not row:
+            return None
+        data = dict(row)
+        total = data.get("success_count", 0) + data.get("fail_count", 0)
+        data["total_uses"] = total
+        data["success_rate"] = round(data["success_count"] / total * 100, 1) if total > 0 else 0
+        data["body"] = self._loads(data.get("body"), {})
+        return data
+
+    def list_skills_with_stats(self, status: str | None = None) -> list[dict[str, Any]]:
+        """List skills with calculated success rates."""
+        with self.connect() as conn:
+            if status:
+                rows = conn.execute("SELECT * FROM skills WHERE status=? ORDER BY updated_at DESC", (status,)).fetchall()
+            else:
+                rows = conn.execute("SELECT * FROM skills ORDER BY updated_at DESC").fetchall()
+        result = []
+        for row in rows:
+            data = dict(row)
+            total = data.get("success_count", 0) + data.get("fail_count", 0)
+            data["total_uses"] = total
+            data["success_rate"] = round(data["success_count"] / total * 100, 1) if total > 0 else 0
+            data["body"] = self._loads(data.get("body"), {})
+            result.append(data)
+        return result
+
+    def auto_demote_skills(self, min_uses: int = 5, min_success_rate: float = 30.0) -> list[str]:
+        """Auto-demote skills with low success rate. Returns list of demoted skill names."""
+        demoted = []
+        with self.connect() as conn:
+            rows = conn.execute(
+                """SELECT name, success_count, fail_count FROM skills
+                   WHERE status='approved' AND (success_count + fail_count) >= ?""",
+                (min_uses,),
+            ).fetchall()
+            for row in rows:
+                total = row["success_count"] + row["fail_count"]
+                rate = row["success_count"] / total * 100 if total > 0 else 0
+                if rate < min_success_rate:
+                    conn.execute(
+                        "UPDATE skills SET status='demoted', updated_at=? WHERE name=?",
+                        (time.time(), row["name"]),
+                    )
+                    demoted.append(row["name"])
+        return demoted
+
+    def upgrade_skill_version(self, name: str) -> int:
+        """Increment skill version. Returns new version."""
+        with self.connect() as conn:
+            conn.execute(
+                "UPDATE skills SET version=version+1, updated_at=? WHERE name=?",
+                (time.time(), name),
+            )
+            row = conn.execute("SELECT version FROM skills WHERE name=?", (name,)).fetchone()
+        return row["version"] if row else 0
+
+    # ── Failure Patterns ──────────────────────────────────────────
+
+    def record_failure_pattern(
+        self,
+        pattern: str,
+        tool: str,
+        error_signature: str,
+        resolution: str = "",
+    ) -> str:
+        """Record or increment a failure pattern. Returns pattern id."""
+        # Check if this pattern already exists
+        with self.connect() as conn:
+            existing = conn.execute(
+                "SELECT id, occurrence_count FROM failure_patterns WHERE error_signature=? AND tool=? AND resolved=0",
+                (error_signature, tool),
+            ).fetchone()
+            if existing:
+                conn.execute(
+                    "UPDATE failure_patterns SET occurrence_count=occurrence_count+1, last_seen_at=? WHERE id=?",
+                    (time.time(), existing["id"]),
+                )
+                return existing["id"]
+            # Create new pattern
+            pattern_id = uuid.uuid4().hex
+            conn.execute(
+                """INSERT INTO failure_patterns (id, pattern, tool, error_signature, occurrence_count, first_seen_at, last_seen_at, resolution)
+                   VALUES (?, ?, ?, ?, 1, ?, ?, ?)""",
+                (pattern_id, pattern, tool, error_signature, time.time(), time.time(), resolution),
+            )
+        return pattern_id
+
+    def get_failure_patterns(self, tool: str | None = None, unresolved_only: bool = True, min_occurrences: int = 2) -> list[dict[str, Any]]:
+        """Get failure patterns, optionally filtered by tool."""
+        clauses = []
+        params: list[Any] = []
+        if unresolved_only:
+            clauses.append("resolved=0")
+        if tool:
+            clauses.append("tool=?")
+            params.append(tool)
+        clauses.append("occurrence_count>=?")
+        params.append(min_occurrences)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        with self.connect() as conn:
+            rows = conn.execute(
+                f"SELECT * FROM failure_patterns {where} ORDER BY occurrence_count DESC, last_seen_at DESC",
+                params,
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def resolve_failure_pattern(self, pattern_id: str, resolution: str = "") -> None:
+        """Mark a failure pattern as resolved."""
+        with self.connect() as conn:
+            conn.execute(
+                "UPDATE failure_patterns SET resolved=1, resolution=?, last_seen_at=? WHERE id=?",
+                (resolution, time.time(), pattern_id),
+            )
 
     def record_tool_trace(self, trace: dict[str, Any]) -> dict[str, Any]:
         record = {
@@ -585,6 +852,167 @@ class SQLiteBackend:
                 (like, limit),
             ).fetchall()
         return [dict(row) for row in rows]
+
+    # ── Trace: Agent Runs ─────────────────────────────────────────
+
+    def trace_start_run(self, user_message: str, channel: str = "web") -> str:
+        """Create a new agent run. Returns run_id."""
+        run_id = uuid.uuid4().hex
+        with self.connect() as conn:
+            conn.execute(
+                """INSERT INTO agent_runs (id, user_message, channel, status, created_at)
+                   VALUES (?, ?, ?, 'running', ?)""",
+                (run_id, user_message, channel, time.time()),
+            )
+        return run_id
+
+    def trace_finish_run(
+        self,
+        run_id: str,
+        *,
+        status: str = "completed",
+        final_reply: str = "",
+        total_tool_calls: int = 0,
+        total_steps: int = 0,
+        elapsed_ms: float = 0,
+    ) -> None:
+        with self.connect() as conn:
+            conn.execute(
+                """UPDATE agent_runs SET status=?, final_reply=?, total_tool_calls=?,
+                   total_steps=?, elapsed_ms=?, finished_at=? WHERE id=?""",
+                (status, final_reply, total_tool_calls, total_steps, elapsed_ms, time.time(), run_id),
+            )
+
+    # ── Trace: Steps ─────────────────────────────────────────────
+
+    def trace_add_step(
+        self,
+        run_id: str,
+        step_index: int,
+        phase: str = "execute",
+        summary: str = "",
+        tool_calls_count: int = 0,
+        elapsed_ms: float = 0,
+    ) -> str:
+        step_id = uuid.uuid4().hex
+        with self.connect() as conn:
+            conn.execute(
+                """INSERT INTO agent_steps (id, run_id, step_index, phase, tool_calls_count, summary, elapsed_ms, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (step_id, run_id, step_index, phase, tool_calls_count, summary, elapsed_ms, time.time()),
+            )
+        return step_id
+
+    # ── Trace: Tool Calls ─────────────────────────────────────────
+
+    def trace_add_tool_call(
+        self,
+        run_id: str,
+        tool: str,
+        args: dict[str, Any],
+        result: Any = None,
+        *,
+        step_id: str = "",
+        ok: bool = True,
+        error: str = "",
+        elapsed_ms: float = 0,
+    ) -> str:
+        call_id = uuid.uuid4().hex
+        with self.connect() as conn:
+            conn.execute(
+                """INSERT INTO tool_calls (id, run_id, step_id, tool, args, result, error, ok, elapsed_ms, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    call_id, run_id, step_id, tool,
+                    json.dumps(args, ensure_ascii=False),
+                    json.dumps(result, ensure_ascii=False, default=str) if result is not None else None,
+                    error, 1 if ok else 0, elapsed_ms, time.time(),
+                ),
+            )
+        return call_id
+
+    # ── Trace: Reflections ────────────────────────────────────────
+
+    def trace_add_reflection(
+        self,
+        run_id: str,
+        diagnosis: str,
+        *,
+        kind: str = "auto",
+        trigger: str = "",
+        lesson: str = "",
+        skill_generated: str = "",
+    ) -> str:
+        ref_id = uuid.uuid4().hex
+        with self.connect() as conn:
+            conn.execute(
+                """INSERT INTO reflections (id, run_id, kind, trigger, diagnosis, lesson, skill_generated, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (ref_id, run_id, kind, trigger, diagnosis, lesson, skill_generated, time.time()),
+            )
+        return ref_id
+
+    # ── Trace: Queries ────────────────────────────────────────────
+
+    def trace_list_runs(self, limit: int = 20, status: str | None = None) -> list[dict[str, Any]]:
+        with self.connect() as conn:
+            if status:
+                rows = conn.execute(
+                    "SELECT * FROM agent_runs WHERE status=? ORDER BY created_at DESC LIMIT ?",
+                    (status, limit),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM agent_runs ORDER BY created_at DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+        return [dict(r) for r in rows]
+
+    def trace_get_run(self, run_id: str) -> dict[str, Any] | None:
+        with self.connect() as conn:
+            row = conn.execute("SELECT * FROM agent_runs WHERE id=?", (run_id,)).fetchone()
+        return dict(row) if row else None
+
+    def trace_get_steps(self, run_id: str) -> list[dict[str, Any]]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM agent_steps WHERE run_id=? ORDER BY step_index",
+                (run_id,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def trace_get_tool_calls(self, run_id: str) -> list[dict[str, Any]]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM tool_calls WHERE run_id=? ORDER BY created_at",
+                (run_id,),
+            ).fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["args"] = self._loads(d.get("args"), {})
+            d["result"] = self._loads(d.get("result"), d.get("result"))
+            d["ok"] = bool(d.get("ok"))
+            result.append(d)
+        return result
+
+    def trace_get_reflections(self, run_id: str) -> list[dict[str, Any]]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM reflections WHERE run_id=? ORDER BY created_at",
+                (run_id,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def trace_get_full_run(self, run_id: str) -> dict[str, Any] | None:
+        """Get run with all nested data (steps, tool_calls, reflections)."""
+        run = self.trace_get_run(run_id)
+        if not run:
+            return None
+        run["steps"] = self.trace_get_steps(run_id)
+        run["tool_calls"] = self.trace_get_tool_calls(run_id)
+        run["reflections"] = self.trace_get_reflections(run_id)
+        return run
 
     def _parent_path(self, parent_id: str | None) -> str:
         if not parent_id:

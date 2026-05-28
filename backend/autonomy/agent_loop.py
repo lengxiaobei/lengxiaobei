@@ -13,6 +13,7 @@ Tool calls use a simple text format, not provider-specific JSON.
 from __future__ import annotations
 
 import asyncio
+import enum
 import inspect
 import json
 import re
@@ -22,6 +23,48 @@ from typing import Any
 
 from backend.memory.sqlite_backend import SQLiteMemoryBackend
 from backend.config import get_settings
+from backend.evolution.brain_hooks import BrainHooks
+
+
+# ── State Machine Phases ────────────────────────────────────────
+
+class Phase(str, enum.Enum):
+    """Agent execution phases. Flows: IDLE→DIAGNOSE→PLAN→EXECUTE→VERIFY→REFLECT"""
+    IDLE = "idle"
+    DIAGNOSE = "diagnose"
+    PLAN = "plan"
+    EXECUTE = "execute"
+    VERIFY = "verify"
+    REFLECT = "reflect"
+
+
+# Phase transition rules:
+#   DIAGNOSE  → PLAN (analysis done)
+#   PLAN      → EXECUTE (plan ready)
+#   EXECUTE   → VERIFY (tools executed)
+#   VERIFY    → REFLECT (verified) or DIAGNOSE (failed, retry)
+#   DIAGNOSE  → REFLECT (max failures reached)
+
+PHASE_TRANSITIONS = {
+    Phase.DIAGNOSE: Phase.PLAN,
+    Phase.PLAN: Phase.EXECUTE,
+    Phase.EXECUTE: Phase.VERIFY,
+    Phase.VERIFY: Phase.REFLECT,  # on success; on failure → DIAGNOSE
+}
+
+MAX_PHASE_FAILURES = 3  # After this many failures in VERIFY, force REFLECT
+
+
+class LLMCallFailedError(Exception):
+    """Raised when the LLM completer call fails (network error, timeout, etc.).
+
+    This distinguishes infrastructure failures from the model legitimately
+    returning empty content, so callers can handle each case appropriately.
+    """
+
+    def __init__(self, message: str, original_error: Exception | None = None) -> None:
+        super().__init__(message)
+        self.original_error = original_error
 
 
 # ── Tool call format (model-agnostic) ───────────────────────────────
@@ -79,6 +122,7 @@ class TurnResult:
     goals_updated: bool
     elapsed_ms: float
     iterations: int = 0
+    run_id: str = ""
 
 
 @dataclass
@@ -92,6 +136,37 @@ class AgentConfig:
     memory_promotion_interval_seconds: float = 30 * 60
     goal_check_interval_seconds: float = 10 * 60
     prune_threshold: int = 5000
+    max_phase_failures: int = MAX_PHASE_FAILURES
+
+
+@dataclass
+class RunState:
+    """Tracks the state machine progress for a single agent run."""
+
+    phase: Phase = Phase.IDLE
+    round_num: int = 0
+    failure_count: int = 0
+    phase_failure_count: int = 0  # Cumulative failures across VERIFY→DIAGNOSE cycles
+    max_phase_failures: int = MAX_PHASE_FAILURES
+    all_tool_calls: list = field(default_factory=list)
+    tool_observations: list = field(default_factory=list)
+    conversation: list = field(default_factory=list)
+    final_reply: str = ""
+    run_id: str = ""
+
+    def transition(self, to: Phase) -> None:
+        """Move to a new phase. Failure count persists across DIAGNOSE retries."""
+        self.phase = to
+
+    def record_failure(self) -> None:
+        """Record a tool failure. Increments both counters."""
+        self.failure_count += 1
+        self.phase_failure_count += 1
+
+    @property
+    def should_force_reflect(self) -> bool:
+        """True if too many failures — force REFLECT instead of retry."""
+        return self.phase_failure_count >= self.max_phase_failures
 
 
 class AgentLoop:
@@ -107,9 +182,13 @@ class AgentLoop:
         self,
         memory: SQLiteMemoryBackend | None = None,
         config: AgentConfig | None = None,
+        llm_completer: Any = None,
         tools: dict[str, Any] | None = None,
-        llm_completer: Any | None = None,
-        logger: Any | None = None,
+        logger: Any = None,
+        brain_hooks: BrainHooks | None = None,
+        trace_backend: Any = None,
+        context_compressor: Any = None,
+        fact_extractor: Any = None,
     ) -> None:
         self.memory = memory or SQLiteMemoryBackend()
         self.config = config or AgentConfig()
@@ -117,6 +196,10 @@ class AgentLoop:
         self.tool_specs: dict[str, ToolSpec] = {}
         self.llm_completer = llm_completer
         self.logger = logger or self._make_logger()
+        self.brain_hooks = brain_hooks
+        self.trace = trace_backend  # SQLiteBackend for trace writing
+        self.context_compressor = context_compressor
+        self.fact_extractor = fact_extractor
 
         # Runtime state
         self._turn_count: int = 0
@@ -146,19 +229,22 @@ class AgentLoop:
         self.logger.info("AgentLoop stopped")
 
     async def handle(self, text: str, channel: str = "web") -> TurnResult:
-        """Process one user message through the iterative agent loop.
+        """Process one user message through the state machine agent loop.
 
-        This is the core change: instead of plan-once-call-once, we loop:
-            LLM generates text (may include <tool> tags)
-            → parse tool calls
-            → execute tools
-            → append results to conversation
-            → feed back to LLM
-            → repeat until no more tool calls or max rounds reached
+        Phases: IDLE → DIAGNOSE → PLAN → EXECUTE → VERIFY → REFLECT
+        On VERIFY failure: → DIAGNOSE (retry with failure context)
+        After max failures: → REFLECT (give up and summarize)
         """
         started = time.time()
         self._last_activity_at = time.time()
         self._turn_count += 1
+
+        # ── Initialize state machine ──
+        state = RunState(phase=Phase.DIAGNOSE, max_phase_failures=self.config.max_phase_failures)
+
+        # ── Trace: start run ──
+        if self.trace:
+            state.run_id = self.trace.trace_start_run(text, channel)
 
         # 1. Write user message to memory
         self.memory.add_node(
@@ -171,124 +257,346 @@ class AgentLoop:
         # 2. Recall relevant context
         recall = self._recall(text)
 
-        # 3. Build initial system prompt with tool descriptions
-        system_prompt = self._build_system_prompt(recall)
+        # 3. BrainHooks refresh
+        if self.brain_hooks:
+            self.brain_hooks.bind_tool_catalog(self.tools)
+            new_skills = self.brain_hooks.refresh_skills()
+            if new_skills:
+                for skill_name, skill_fn in new_skills.items():
+                    self.register_tool(skill_name, skill_fn, category="dynamic_skill",
+                                      description=f"动态进化技能: {skill_name}")
 
-        # 4. Iterative tool-calling loop
-        all_tool_calls: list[dict[str, Any]] = []
-        conversation: list[dict[str, str]] = [
-            {"role": "user", "content": text},
-        ]
-        final_reply = ""
-        iterations = 0
-        tool_observations: list[dict[str, Any]] = []
+        # 4. State machine loop
+        state.conversation = [{"role": "user", "content": text}]
+        llm_response = ""  # Initialize to avoid unbound error
 
-        for round_num in range(self.config.max_tool_rounds):
-            iterations = round_num + 1
+        while state.round_num < self.config.max_tool_rounds:
+            state.round_num += 1
+            step_started = time.time()
 
-            # Call LLM with current conversation
-            llm_response = await self._call_llm(conversation, system_prompt)
+            # Compress context if conversation gets too long
+            if self.context_compressor and len(state.conversation) > 10:
+                state.conversation = await self.context_compressor.maybe_compress(state.conversation)
 
+            # Build phase-aware system prompt
+            system_prompt = self._build_system_prompt(recall, phase=state.phase, state=state)
+
+            # Call LLM
+            llm_call_failed = False
+            try:
+                llm_response = await self._call_llm(state.conversation, system_prompt)
+            except LLMCallFailedError as exc:
+                self.logger.warning("LLM call failed in round %d: %s", state.round_num, exc)
+                llm_response = ""
+                llm_call_failed = True
+
+            # Handle empty LLM response
             if not llm_response:
-                final_reply = self._fallback_reply_from_tool_observations(tool_observations)
-                if not final_reply:
-                    final_reply = "模型接口已连通，但这一轮返回了空内容；我没有拿到可展示的回答。"
+                if state.round_num == 1:
+                    summary_conv = list(state.conversation)
+                    summary_conv.append({"role": "user", "content": "请基于上方工具执行结果，用中文给出简洁的总结和结论。"})
+                    try:
+                        retry = await self._call_llm(summary_conv, system_prompt)
+                    except LLMCallFailedError:
+                        retry = ""
+                    if retry and retry.strip():
+                        state.final_reply = retry.strip()
+                        break
+                state.final_reply = self._fallback_reply_from_tool_observations(state.tool_observations)
+                if not state.final_reply:
+                    if llm_call_failed:
+                        state.final_reply = "模型调用失败，请稍后重试或检查 LLM 后端连接。"
+                    else:
+                        state.final_reply = "模型接口已连通，但返回了空内容。"
                 break
 
-            # Parse tool calls from LLM response
+            # Parse tool calls
             tool_calls = self._parse_tool_calls(llm_response)
 
-            if not tool_calls:
-                # No more tool calls — LLM is done, this is the final reply
-                final_reply = self._strip_tool_tags(llm_response)
-                break
+            # ── Trace: record step ──
+            step_id = ""
+            if self.trace and state.run_id:
+                step_id = self.trace.trace_add_step(
+                    state.run_id, state.round_num,
+                    phase=state.phase.value,
+                    tool_calls_count=len(tool_calls),
+                )
 
-            # Execute tool calls and collect results
+            # No tool calls → LLM is done
+            if not tool_calls:
+                state.final_reply = self._strip_tool_tags(llm_response)
+                # Transition to next phase based on current phase
+                if state.phase == Phase.DIAGNOSE:
+                    state.transition(Phase.PLAN)
+                    # PLAN phase just re-asks LLM with plan context
+                    state.conversation.append({"role": "assistant", "content": llm_response})
+                    state.conversation.append({"role": "user", "content": "计划已明确，请立即执行修改。"})
+                    continue
+                elif state.phase == Phase.PLAN:
+                    state.transition(Phase.EXECUTE)
+                    state.conversation.append({"role": "assistant", "content": llm_response})
+                    state.conversation.append({"role": "user", "content": "请执行修改。"})
+                    continue
+                elif state.phase == Phase.EXECUTE:
+                    state.transition(Phase.VERIFY)
+                    state.conversation.append({"role": "assistant", "content": llm_response})
+                    state.conversation.append({"role": "user", "content": "修改完成，请验证结果。"})
+                    continue
+                else:
+                    # VERIFY or REFLECT → done
+                    break
+
+            # Execute tool calls
             tool_results_text = ""
+            has_failures = False
             for tc in tool_calls:
-                all_tool_calls.append(tc)
+                state.all_tool_calls.append(tc)
+                tool_started = time.time()
                 result = await self._execute_tool(tc["name"], tc["args"])
-                tool_observations.append({"tool": tc["name"], "args": tc["args"], "result": result})
+                tool_elapsed = (time.time() - tool_started) * 1000
+                ok = not (isinstance(result, dict) and result.get("error"))
+
+                if not ok:
+                    has_failures = True
+                    state.record_failure()
+
+                # ── Trace: record tool call ──
+                if self.trace and state.run_id:
+                    error_msg = ""
+                    if not ok and isinstance(result, dict):
+                        error_msg = str(result.get("error", ""))
+                    self.trace.trace_add_tool_call(
+                        state.run_id, tc["name"], tc["args"], result,
+                        step_id=step_id, ok=ok, error=error_msg,
+                        elapsed_ms=tool_elapsed,
+                    )
+                    # Record failure pattern for auto-learning
+                    if not ok and error_msg and self.trace:
+                        try:
+                            self.trace.record_failure_pattern(
+                                pattern=f"tool:{tc['name']}:{error_msg[:100]}",
+                                tool=tc["name"],
+                                error_signature=error_msg[:200],
+                            )
+                        except Exception as exc:
+                            self.logger.debug("Failed to record failure pattern for tool %s: %s", tc["name"], exc)
+
+                # ── BrainHooks ──
+                if self.brain_hooks:
+                    await self.brain_hooks.on_tool_result(
+                        tc["name"], tc["args"], result, tool_elapsed, ok,
+                    )
+                    if not ok:
+                        error_text = str(result.get("error", "unknown")) if isinstance(result, dict) else str(result)
+                        recovery = await self.brain_hooks.on_tool_failure(
+                            tc["name"], tc["args"], error_text,
+                        )
+                        if recovery and recovery.retry_ok:
+                            self.logger.info("auto-recovery succeeded for %s", tc["name"])
+                            result = recovery.retry_result
+                            ok = True
+                            has_failures = False
+
+                state.tool_observations.append({"tool": tc["name"], "args": tc["args"], "result": result})
                 result_text = json.dumps(result, ensure_ascii=False, default=str)
-                # Truncate very long results to avoid context overflow
                 if len(result_text) > 4000:
                     result_text = result_text[:4000] + "\n... (truncated)"
                 tool_results_text += TOOL_RESULT_TEMPLATE.format(
                     name=tc["name"], result=result_text
                 ) + "\n"
 
-            # Feed results back into conversation for next LLM call
-            conversation.append({"role": "assistant", "content": llm_response})
-            conversation.append({"role": "user", "content": tool_results_text})
+            # ── Phase transition after tool execution ──
+            if has_failures and state.phase == Phase.VERIFY:
+                # Verification failed → back to DIAGNOSE
+                if state.should_force_reflect:
+                    # Too many failures → force REFLECT
+                    state.transition(Phase.REFLECT)
+                    state.conversation.append({"role": "assistant", "content": llm_response})
+                    state.conversation.append({"role": "user", "content": (
+                        f"验证失败（已重试 {state.phase_failure_count} 次）。"
+                        "请直接总结：做了什么、哪里失败了、可能的原因。"
+                    )})
+                else:
+                    state.transition(Phase.DIAGNOSE)
+                    state.conversation.append({"role": "assistant", "content": llm_response})
+                    state.conversation.append({"role": "user", "content": tool_results_text + "\n验证失败，请重新诊断问题。"})
+            elif not has_failures and state.phase == Phase.VERIFY:
+                # Verify succeeded → REFLECT
+                state.transition(Phase.REFLECT)
+                state.conversation.append({"role": "assistant", "content": llm_response})
+                state.conversation.append({"role": "user", "content": tool_results_text + "\n验证通过，请给出最终回复。"})
+            else:
+                # Normal transition: feed results back
+                next_phase = PHASE_TRANSITIONS.get(state.phase, Phase.EXECUTE)
+                state.transition(next_phase)
+                state.conversation.append({"role": "assistant", "content": llm_response})
+                state.conversation.append({"role": "user", "content": tool_results_text})
 
-        else:
-            # Max rounds reached
-            final_reply = self._strip_tool_tags(llm_response) if llm_response else "达到最大工具调用轮次，请简化请求。"
+        # 5. Finalize
+        if not state.final_reply:
+            state.final_reply = self._strip_tool_tags(llm_response) if llm_response else ""
+        if not state.final_reply:
+            state.final_reply = self._fallback_reply_from_tool_observations(state.tool_observations)
+        if not state.final_reply:
+            state.final_reply = "模型接口已连通，但最终回复为空；请换一种说法或让我直接执行诊断。"
 
-        final_reply = final_reply.strip()
-        if not final_reply:
-            final_reply = self._fallback_reply_from_tool_observations(tool_observations)
-        if not final_reply:
-            final_reply = "模型接口已连通，但最终回复为空；请换一种说法或让我直接执行具体诊断。"
+        state.final_reply = state.final_reply.strip()
 
-        # 5. Write assistant reply to memory
+        # 6. Write to memory
         self.memory.add_node(
-            content=final_reply,
+            content=state.final_reply,
             node_type="conversation",
             metadata={"role": "assistant", "channel": channel, "turn": self._turn_count,
-                      "tool_calls": all_tool_calls, "iterations": iterations},
-            summary=final_reply[:120],
+                      "tool_calls": state.all_tool_calls, "iterations": state.round_num,
+                      "phase": state.phase.value, "failures": state.failure_count},
+            summary=state.final_reply[:120],
         )
 
-        # 6. Update goals
-        goals_updated = self._update_goals(text, final_reply)
+        # 7. Update goals
+        goals_updated = self._update_goals(text, state.final_reply)
 
         elapsed_ms = (time.time() - started) * 1000
 
+        # ── Trace: finish run ──
+        if self.trace and state.run_id:
+            status = "completed" if not state.failure_count else "completed_with_errors"
+            self.trace.trace_finish_run(
+                state.run_id, status=status, final_reply=state.final_reply[:500],
+                total_tool_calls=len(state.all_tool_calls), total_steps=state.round_num,
+                elapsed_ms=elapsed_ms,
+            )
+            if state.failure_count > 0:
+                self.trace.trace_add_reflection(
+                    state.run_id,
+                    diagnosis=f"任务完成但有 {state.failure_count} 个工具调用失败（经历 {state.phase.value} 阶段）",
+                    kind="auto",
+                    trigger="tool_failure",
+                    lesson=f"共 {len(state.all_tool_calls)} 次工具调用，{state.failure_count} 次失败",
+                )
+
+        # Extract facts from conversation for long-term memory
+        if self.fact_extractor and state.final_reply:
+            try:
+                await self.fact_extractor.maybe_extract(text, state.final_reply[:1000])
+            except Exception as exc:
+                self.logger.warning("Failed to extract facts from conversation: %s", exc, exc_info=True)
+
         return TurnResult(
-            reply=final_reply,
-            tool_calls=all_tool_calls,
+            reply=state.final_reply,
+            tool_calls=state.all_tool_calls,
             recall_count=len(recall),
             goals_updated=goals_updated,
             elapsed_ms=elapsed_ms,
-            iterations=iterations,
+            iterations=state.round_num,
+            run_id=state.run_id,
         )
 
     # ── System prompt with tool descriptions ─────────────────────────
 
-    def _build_system_prompt(self, recall: list[dict[str, Any]]) -> str:
-        """Build system prompt including tool documentation and recalled memory."""
+    def _build_system_prompt(self, recall: list[dict[str, Any]], phase: Phase = Phase.DIAGNOSE, state: RunState | None = None) -> str:
+        """Build system prompt including tool documentation, recalled memory, and phase guidance."""
         tool_docs = self._tool_descriptions()
         recall_text = self._build_recall_prompt(recall)
 
+        # ── Hermes Brain: real-time insights and failure patterns ──
+        brain_context = ""
+        if self.brain_hooks:
+            insights = self.brain_hooks.get_recent_insights(limit=5)
+            failures = self.brain_hooks.get_failure_patterns()
+            if insights:
+                brain_context += insights + "\n"
+            if failures:
+                brain_context += failures + "\n"
+
+        # ── Phase-specific guidance ──
+        phase_guide = self._phase_guidance(phase, state)
+
         return (
             "你是冷小北，运行在 LengXiaobei 本地优先智能体框架中。\n"
-            "你拥有长期记忆，可以读写项目文件，执行命令，搜索代码，修改源码。\n\n"
-            "设计原则参考 OpenClaw 的动态工具运行时：工具是运行时提供的能力契约，"
-            "不是 Commander 写死的菜单。遇到不确定、需要验证、需要行动的请求时，"
-            "你应该先查看可用工具，再自己选择最小必要工具链完成任务。\n\n"
+            "你拥有完整的代码修改能力：读写文件、精确编辑、运行测试和命令。\n"
+            "你的核心优势是可以自主执行修复循环：诊断→定位→编辑→验证。\n\n"
+            "## 工具调用格式\n\n"
+            "通过以下 XML 标签调用工具（参数必须是合法 JSON）：\n\n"
+            '<tool name="工具名">\n{"参数": "值"}\n</tool>\n\n'
+            f"{phase_guide}\n"
+            "## 工具调用失败的处理\n\n"
+            "**filesystem_edit 失败时（old_string not found）**：\n"
+            "- 不要放弃，不要换方法，直接重新 filesystem_read 获取文件精确内容\n"
+            "- 从新的工具输出里复制 old_string 的**精确文本**（包括所有空格和缩进）\n"
+            "- 然后用相同的 filesystem_edit 重试\n"
+            "- 如果多次失败，改用 filesystem_read + filesystem_write 完整重写整个文件\n\n"
+            "**其他工具失败时**：分析错误信息，重新选择工具重试\n\n"
             "## 可用工具\n\n"
-            "你可以通过以下格式调用工具：\n\n"
-            '<tool name="工具名">\n'
-            "参数 JSON\n"
-            "</tool>\n\n"
             f"{tool_docs}\n\n"
-            "## 工作原则\n\n"
-            "1. 先读后改：修改文件前先读取理解上下文\n"
-            "2. 精确编辑：用 filesystem_edit 做精确替换，不要全文覆盖\n"
-            "3. 验证结果：修改后运行编译检查或测试\n"
-            "4. 失败修复：如果验证失败，分析错误信息并修复\n"
-            "5. 诚实边界：不能读写 .env 文件，不能访问项目外路径\n\n"
-            "## 修复类请求的硬要求\n\n"
-            "当用户要求修复、定位问题、自己验证、前台报错、后端报错或能力不可用时，"
-            "不要只解释原因。必须至少执行一次诊断工具，例如 code_quality、code_search、"
-            "filesystem_read、shell_exec 或 list_files；如果定位到明确源码问题，优先用 "
-            "filesystem_edit 精确修复，然后用 shell_exec 或 code_quality 验证。\n\n"
-            "当用户询问联网、搜索、网上资料、当前信息或 web 能力是否可用时，必须调用 "
-            "web_search 做一次小查询来实测，再根据工具结果回答。\n\n"
+            f"{brain_context}"
+            "## 重要原则\n\n"
+            "- 优先用 filesystem_edit 而非 filesystem_write：精确替换，不要全文覆盖\n"
+            "- 修复前必须先读懂上下文，不要盲改\n"
+            "- 测试/验证命令必须实际运行，返回结果再分析\n"
+            "- 遇到 .py 文件报 SyntaxError，先读源码确认问题再改\n"
+            "- 不能读写 .env 文件，不能访问项目外路径\n"
+            "- 关注「实时反思」中的建议，利用「近期失败模式」避免重复犯错\n\n"
             f"{recall_text}\n"
             "回答要简洁、直接、有主见。中文优先。"
         )
+
+    def _phase_guidance(self, phase: Phase, state: RunState | None = None) -> str:
+        """Return phase-specific workflow instructions."""
+        failure_hint = ""
+        if state and state.phase_failure_count > 0:
+            failure_hint = f"\n注意：当前已失败 {state.phase_failure_count} 次，请仔细分析之前的错误再行动。"
+
+        if phase == Phase.DIAGNOSE:
+            return (
+                "## 当前阶段：诊断（DIAGNOSE）\n\n"
+                "你的任务是**理解问题**，不要急着修改代码。\n"
+                "1. 用 code_search/shell_exec 定位问题所在\n"
+                "2. 用 filesystem_read 读取相关源码\n"
+                "3. 分析根因，给出诊断结论\n"
+                "诊断完成后，说明你打算怎么修复，然后开始执行。"
+                f"{failure_hint}"
+            )
+        elif phase == Phase.PLAN:
+            return (
+                "## 当前阶段：规划（PLAN）\n\n"
+                "基于诊断结果，制定修复计划：\n"
+                "1. 需要修改哪些文件\n"
+                "2. 每个文件改什么（具体到函数/行）\n"
+                "3. 预期修改后的效果\n"
+                "计划明确后，立即开始执行。"
+                f"{failure_hint}"
+            )
+        elif phase == Phase.EXECUTE:
+            return (
+                "## 当前阶段：执行（EXECUTE）\n\n"
+                "按计划执行修改：\n"
+                "1. 用 filesystem_edit 做精确替换\n"
+                "2. 每次修改后不要验证，继续下一个修改\n"
+                "3. 所有修改完成后进入验证阶段\n"
+                "注意：优先用 filesystem_edit，不要全文覆盖。"
+                f"{failure_hint}"
+            )
+        elif phase == Phase.VERIFY:
+            return (
+                "## 当前阶段：验证（VERIFY）\n\n"
+                "验证修改是否正确：\n"
+                "1. 用 shell_exec 运行测试/检查\n"
+                "2. 检查输出是否符合预期\n"
+                "3. 如果发现问题，回到诊断阶段重新分析\n"
+                "验证通过后，给出最终回复。"
+                f"{failure_hint}"
+            )
+        elif phase == Phase.REFLECT:
+            return (
+                "## 当前阶段：反思（REFLECT）\n\n"
+                "总结本次任务：\n"
+                "1. 做了什么\n"
+                "2. 结果如何\n"
+                "3. 学到了什么（成功经验或失败教训）\n"
+                "直接给出最终回复。"
+            )
+        else:
+            return "## 代码修改工作流\n\n修复类请求的标准流程：诊断→读源码→精确编辑→验证→修复。"
 
     def _tool_descriptions(self) -> str:
         """Generate tool documentation for the system prompt."""
@@ -388,7 +696,12 @@ class AgentLoop:
     # ── LLM calling ──────────────────────────────────────────────────
 
     async def _call_llm(self, conversation: list[dict[str, str]], system: str) -> str:
-        """Call the configured LLM with conversation history."""
+        """Call the configured LLM with conversation history.
+
+        Raises:
+            LLMCallFailedError: If the LLM completer raises an exception.
+                Callers should catch this to distinguish from empty model output.
+        """
         if self.llm_completer is None:
             return self._fallback_reply_from_conversation(conversation)
 
@@ -403,7 +716,9 @@ class AgentLoop:
             return str(result)
         except Exception as exc:
             self.logger.warning("llm_completer failed: %s", exc)
-            return ""
+            raise LLMCallFailedError(
+                f"LLM completer call failed: {exc}", original_error=exc,
+            ) from exc
 
     def _fallback_reply_from_conversation(self, conversation: list[dict[str, str]]) -> str:
         """Generate a basic reply when no LLM is available."""

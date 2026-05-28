@@ -63,6 +63,8 @@ class Commander:
         if plan.tool:
             observation = await self.dispatcher.dispatch(plan.tool, plan.args)
             reply = self._summarize_tool_result(text, observation)
+        elif plan.intent == "capability":
+            reply = self._capability_reply()
         elif plan.intent == "self_capability":
             reply = self._self_capability_reply()
         elif plan.intent == "ui_optimization":
@@ -293,6 +295,22 @@ class Commander:
             "3. 真实同步连接器和记忆图谱可视化。这样冷小北会从'能记、能反思'进一步走向'能安全改、能验证、能积累'。"
         )
 
+    def _capability_reply(self) -> str:
+        return (
+            "我是冷小北，一个本地优先的自主智能体。我目前能做的事情包括：\n\n"
+            "文件操作：读取、写入、追加、编辑、删除项目内文件，列出目录内容。\n"
+            "代码工具：搜索代码、自动修改代码（code_engineer），帮你重构或修 bug。\n"
+            "终端命令：执行只读 shell 命令查看项目状态，也可以执行完整命令（需谨慎）。\n"
+            "浏览器：打开网页、提取文本、截图。\n"
+            "记忆系统：搜索长期记忆、重建索引，我会记住和你的对话和执行经验。\n"
+            "技能系统：查看和执行已审核通过的技能，新技能需要人工确认。\n"
+            "联网：抓取网页内容、搜索互联网信息。\n"
+            "系统状态：查看当前可用工具和运行状态。\n"
+            "反思：回顾执行轨迹，总结经验教训。\n\n"
+            "你可以直接跟我说具体需求，比如「帮我看下系统状态」「搜索记忆里的xxx」「修改某个文件」，"
+            "我会选择最合适的方式来处理。"
+        )
+
     def _self_capability_reply(self) -> str:
         return (
             "可以，现在我已经具备项目内源码修改工具，但要分层说清楚：我不能修改云端模型权重，也不能越过项目边界。"
@@ -390,21 +408,33 @@ class Commander:
     def _should_use_agent_loop(self, plan: TaskPlan, settings: Any) -> bool:
         """Decide whether to route through the multi-turn Agent Loop.
 
-        Use Agent Loop for any request where LengXiaobei needs to reason
-        about code or take multiple actions — not just for Claude.
+        Use Agent Loop for open-ended requests where LengXiaobei needs
+        to reason, call tools, or take multi-step actions.
+
+        Keep purely informational / management intents deterministic so
+        the LLM can't wander off-topic — that was the root cause of
+        "驴唇不对马嘴" responses (e.g. asking "系统状态" but the
+        agent loop decided to scan code quality instead).
         """
         if self.agent_loop is None:
             return False
+        # Purely informational intents and casual chat — always give
+        # deterministic answers.  Open-ended "chat" is included because
+        # the Agent Loop tends to drag in stale tool-call history from
+        # previous sessions, causing "驴唇不对马嘴" responses for simple
+        # greetings like "你好".
+        # Everything else (reflect, memory_search, ui_optimization,
+        # code_modification, etc.) benefits from the agent loop's
+        # multi-turn reasoning.
         deterministic_intents = {
             "self_capability",
+            "capability",
             "model_info",
             "gateway_restart",
             "system_status",
             "local_agents",
+            "chat",
         }
-        # Keep only small management answers deterministic. Everything else,
-        # including memory/reflect/skill/UI/reference prompts, should flow into
-        # the runtime tool loop so the model can choose tools from the catalog.
         return plan.intent not in deterministic_intents
 
     async def _agent_loop_reply(self, text: str, channel: str) -> dict[str, Any]:
@@ -424,9 +454,11 @@ class Commander:
                 "tool_calls": result.tool_calls,
                 "iterations": result.iterations,
                 "elapsed_ms": result.elapsed_ms,
+                "run_id": result.run_id,
             }
         except Exception as exc:
-            self.logger.warning("Agent Loop failed, falling back to simple chat: %s", exc)
+            if self.logger:
+                self.logger.warning("Agent Loop failed, falling back to simple chat: %s", exc)
             # Fallback to simple LLM chat
             system = self._system_prompt(self._recall_context(text))
             reply = await ollama_chat(text, system=system)
@@ -525,9 +557,60 @@ class Commander:
                 node_type = item.get("type") or item.get("node_type") or "memory"
                 lines.append(f"- [{node_type}] {str(summary).strip()[:180]}")
             return "我查到这些相关记忆：\n" + "\n".join(lines)
+        if observation.get("tool") == "system_status":
+            result = observation.get("result") or {}
+            tools = result.get("tools") or []
+            # Map tool names to (category, human-readable description)
+            _TOOL_DESC: dict[str, tuple[str, str]] = {
+                "filesystem_read": ("文件操作", "读"),
+                "filesystem_write": ("文件操作", "写"),
+                "filesystem_append": ("文件操作", "追加"),
+                "filesystem_edit": ("文件操作", "编辑"),
+                "filesystem_delete": ("文件操作", "删除"),
+                "list_files": ("文件操作", "列表"),
+                "code_search": ("代码工具", "搜索"),
+                "code_engineer": ("代码工具", "工程师（自动修改）"),
+                "shell_readonly": ("终端命令", "只读执行"),
+                "shell_exec": ("终端命令", "完整执行"),
+                "browser": ("浏览器", "页面操作"),
+                "browser_fetch_text": ("浏览器", "文本提取"),
+                "browser_screenshot": ("浏览器", "截图"),
+                "memory_search": ("记忆系统", "搜索"),
+                "memory_reindex": ("记忆系统", "重建索引"),
+                "skill_list": ("技能系统", "列表"),
+                "skill_execute": ("技能系统", "执行"),
+                "reflect": ("反思/状态", "反思"),
+                "system_status": ("反思/状态", "系统状态"),
+                "local_agent_list": ("本地 Agent", "发现"),
+                "local_agent_describe": ("本地 Agent", "描述"),
+                "local_agent_run": ("本地 Agent", "运行"),
+                "web_fetch": ("联网", "网页抓取"),
+                "web_search": ("联网", "网页搜索"),
+            }
+            _CATEGORY_ORDER = [
+                "文件操作", "代码工具", "终端命令", "浏览器",
+                "记忆系统", "技能系统", "反思/状态", "本地 Agent", "联网",
+            ]
+            grouped: dict[str, list[str]] = {}
+            for t in tools:
+                desc = _TOOL_DESC.get(t)
+                if desc:
+                    cat, label = desc
+                    grouped.setdefault(cat, []).append(label)
+            lines = [f"系统正常运行中。", f"- 项目目录：{result.get('project_root', '未知')}"]
+            for cat in _CATEGORY_ORDER:
+                if cat in grouped:
+                    lines.append(f"- {cat}：{'、'.join(grouped[cat])}")
+            return "\n".join(lines)
         result = observation.get("result")
         if isinstance(result, str) and result.strip():
             return f"已处理：{text}\n\n结果：{result}"
+        if isinstance(result, dict) and result:
+            # Format dict results as readable key-value pairs
+            lines = [f"- {k}：{v}" for k, v in list(result.items())[:6]
+                     if not isinstance(v, list) or len(v) < 10]
+            if lines:
+                return f"执行完成：\n" + "\n".join(lines)
         return f"已处理：{text}"
 
     def _sanitize_assistant_reply(self, reply: str, user_text: str) -> str:
@@ -542,7 +625,8 @@ class Commander:
         cleaned = stripped.strip()
         if cleaned:
             return cleaned
-        if self._is_gateway_restart_request(*_normalize(user_text)):
+        norm, compact = _normalize(user_text)
+        if self._is_gateway_restart_request(compact, norm):
             return self._gateway_restart_reply()
         return "我刚才生成了内部工具调用格式，但这个聊天界面不能直接执行那种标记。请直接说明要执行的动作，我会走可用的系统工具。"
 
@@ -587,6 +671,15 @@ def _check_gateway_restart(compact: str, norm: str) -> bool:
     return gw and restart
 
 
+def _check_capability_question(compact: str, norm: str) -> bool:
+    return any(kw in compact for kw in (
+        "你能做什么", "你会什么", "你有什么功能", "能干什么",
+        "你有哪些能力", "你可以做什么", "你都能做",
+    )) or any(kw in norm for kw in (
+        "what can you do", "your capabilities", "what are you able",
+    ))
+
+
 def _check_reference_agent_connect(compact: str, norm: str) -> bool:
     return False
 
@@ -600,6 +693,7 @@ def _check_local_agent(compact: str, norm: str) -> bool:
 
 # Assign the intent table
 Commander._INTENT_TABLE = [
+    ("capability", None, "用户询问冷小北能做什么", _check_capability_question),
     ("self_capability", None, "用户询问自我修改或自我进化边界", _check_self_capability),
     ("ui_optimization", None, "用户要求优化聊天 UI", _check_ui_optimization),
     ("reference_gap", None, "用户询问对标 OpenClaw/Hermes/OpenHuman 的能力差距", _check_reference_gap),

@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
-import requests
+import httpx
 
 from backend.gateway.channels.base import BaseChannel
 
@@ -26,8 +26,16 @@ class WhatsAppChannel(BaseChannel):
             raise RuntimeError("WHATSAPP_BRIDGE_URL is not configured")
         headers = {"Authorization": f"Bearer {self.token}"} if self.token else {}
         payload = {"to": kwargs.get("to") or kwargs.get("chat_id"), "text": text}
-        res = requests.post(f"{self.bridge_url}/send", json=payload, headers=headers, timeout=20)
-        res.raise_for_status()
+        try:
+            async with httpx.AsyncClient() as client:
+                res = await client.post(
+                    f"{self.bridge_url}/send", json=payload, headers=headers, timeout=20
+                )
+            res.raise_for_status()
+        except httpx.TimeoutException:
+            raise RuntimeError("whatsapp send_message timed out")
+        except httpx.HTTPError as exc:
+            raise RuntimeError(f"whatsapp send_message failed: {exc}")
 
     def normalize_update(self, update: dict[str, Any]) -> dict[str, Any]:
         return {"channel": self.name, "chat_id": update.get("from") or update.get("chat_id"), "text": update.get("text") or update.get("body") or "", "raw": update}

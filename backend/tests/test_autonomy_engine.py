@@ -11,7 +11,7 @@ from backend.utils.logger import get_logger
 
 
 class FakeLearner:
-    def learn(self, reference: str, limit: int = 2):
+    async def learn(self, reference: str, limit: int = 2):
         return [
             {
                 "reference": reference,

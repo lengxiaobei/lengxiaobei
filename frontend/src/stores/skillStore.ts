@@ -8,6 +8,11 @@ export type Skill = {
   status: string;
   success_count?: number;
   fail_count?: number;
+  total_uses?: number;
+  success_rate?: number;
+  version?: number;
+  source_run_id?: string;
+  last_used_at?: number;
   path?: string;
   body?: Record<string, unknown>;
 };

@@ -4,12 +4,27 @@ import { ChatPage } from "./pages/ChatPage";
 import { AutonomyPage } from "./pages/AutonomyPage";
 import { MemoryPage } from "./pages/MemoryPage";
 import { SkillsPage } from "./pages/SkillsPage";
+import { TracePage } from "./pages/TracePage";
 import { useSystemStore, type SystemStatus } from "./stores/systemStore";
 import { useWebSocket } from "./hooks/useWebSocket";
 
 export function App() {
-  const { activeTab, refreshStatus, applyStatus, setWsConnected } = useSystemStore();
+  const { activeTab, setActiveTab, refreshStatus, applyStatus, setWsConnected } = useSystemStore();
   const hasFetched = useRef(false);
+
+  // Listen for trace navigation events from chat messages
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.runId) {
+        setActiveTab("trace");
+        // Store the runId for TracePage to pick up
+        sessionStorage.setItem("lengxiaobei-selected-run", detail.runId);
+      }
+    };
+    window.addEventListener("lengxiaobei:show-trace", handler);
+    return () => window.removeEventListener("lengxiaobei:show-trace", handler);
+  }, [setActiveTab]);
 
   // Initial fetch on mount
   useEffect(() => {
@@ -50,6 +65,7 @@ export function App() {
       {activeTab === "memory" && <MemoryPage />}
       {activeTab === "skills" && <SkillsPage />}
       {activeTab === "autonomy" && <AutonomyPage />}
+      {activeTab === "trace" && <TracePage />}
     </Sidebar>
   );
 }

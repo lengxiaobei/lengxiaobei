@@ -20,7 +20,16 @@ class AutonomyExecutor:
         for command in commands:
             result = await self.dispatcher.dispatch("shell_exec", {"command": command, "timeout": 120})
             checks.append({"command": command, "result": result})
-        ok = all(item["result"].get("ok") and item["result"].get("result", {}).get("returncode") == 0 for item in checks)
+        ok = True
+        for item in checks:
+            result = item["result"]
+            if not result.get("ok"):
+                ok = False
+                continue
+            # Dispatcher may wrap: {ok, result: {returncode, ...}} or flat {ok, returncode, ...}
+            inner = result.get("result") if isinstance(result.get("result"), dict) else result
+            if inner.get("returncode", -1) != 0:
+                ok = False
         return {"ok": ok, "checks": checks, "expensive": include_expensive, "ts": time.time()}
 
     async def write_roadmap(self, content: str) -> dict[str, Any]:

@@ -24,7 +24,7 @@ class SkillStore:
         self.skills_dir.mkdir(parents=True, exist_ok=True)
         self.sqlite = sqlite
 
-    def save(self, skill: dict[str, Any]) -> Path:
+    def save(self, skill: dict[str, Any], *, source_run_id: str | None = None) -> Path:
         """保存 pending 技能草稿，局部参考 Hermes skill_store。"""
         import time
 
@@ -34,6 +34,8 @@ class SkillStore:
         skill["name"] = name
         skill.setdefault("created_at", now)
         skill["updated_at"] = now
+        if source_run_id:
+            skill["source_run_id"] = source_run_id
         path = self.skills_dir / f"{name}.yaml"
         body = "# Reference: Hermes skill-store; pending by default for human review\n"
         body += json.dumps(skill, ensure_ascii=False, indent=2)
@@ -106,6 +108,30 @@ class SkillStore:
     def record_result(self, name: str, ok: bool) -> None:
         if self.sqlite:
             self.sqlite.record_skill_result(self._safe_name(name), ok)
+
+    def get_stats(self, name: str) -> dict[str, Any] | None:
+        """Get skill with success rate stats."""
+        if self.sqlite:
+            return self.sqlite.get_skill_stats(self._safe_name(name))
+        return self.load(name)
+
+    def list_with_stats(self, status: str | None = None) -> list[dict[str, Any]]:
+        """List skills with success rate, sorted by success_rate desc."""
+        if self.sqlite:
+            return self.sqlite.list_skills_with_stats(status=status)
+        return self.list(status=status)
+
+    def auto_demote(self, min_uses: int = 5, min_success_rate: float = 30.0) -> list[str]:
+        """Auto-demote skills with low success rate. Returns demoted skill names."""
+        if not self.sqlite:
+            return []
+        return self.sqlite.auto_demote_skills(min_uses=min_uses, min_success_rate=min_success_rate)
+
+    def upgrade_version(self, name: str) -> int:
+        """Increment skill version. Returns new version number."""
+        if not self.sqlite:
+            return 0
+        return self.sqlite.upgrade_skill_version(self._safe_name(name))
 
     def _status(self, path: Path) -> str:
         text = path.read_text(encoding="utf-8", errors="replace")

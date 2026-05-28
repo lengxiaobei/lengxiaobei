@@ -49,6 +49,12 @@ async def _build_status(rt) -> dict:
             "memory": "LengXiaobei native memory",
             "evolution": "LengXiaobei native reflection",
         },
+        "brain_hooks": {
+            "active": bool(rt.brain_hooks),
+            "insights_count": len(rt.brain_hooks.insights) if rt.brain_hooks else 0,
+            "recoveries_count": len(rt.brain_hooks.recoveries) if rt.brain_hooks else 0,
+            "injected_skills": len(rt.brain_hooks._injected_skills) if rt.brain_hooks else 0,
+        } if rt.brain_hooks else None,
     }
 
 

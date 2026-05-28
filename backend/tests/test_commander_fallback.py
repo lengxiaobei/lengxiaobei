@@ -23,6 +23,7 @@ class _AgentLoop:
             tool_calls = []
             iterations = 1
             elapsed_ms = 1
+            run_id = ""
 
         return Result()
 
@@ -143,7 +144,7 @@ def test_open_ended_tool_intents_use_agent_loop():
         agent_loop=_AgentLoop(),
     )
 
-    for text in ("我让你优化他", "搜索记忆：联网能力", "反思最近一次失败", "参考 OpenClaw 怎么设计工具"):
+    for text in ("我让你优化他", "搜索记忆：联网能力", "反思最近一次失败", "看看现在有什么技能"):
         result = asyncio.run(commander.handle_message(text))
         assert result["text"] == "agent loop handled"
         assert result["plan"]["intent"] == "agent_loop"

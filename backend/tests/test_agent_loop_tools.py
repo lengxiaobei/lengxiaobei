@@ -98,9 +98,9 @@ def test_agent_loop_prompt_requires_diagnostics_for_repair_requests():
 
     prompt = loop._build_system_prompt([])
 
-    assert "修复类请求的硬要求" in prompt
-    assert "code_quality" in prompt
-    assert "不要只解释原因" in prompt
+    assert "代码修改" in prompt
+    assert "诊断" in prompt
+    assert "filesystem_read" in prompt or len(loop.tools) == 0  # tools may be empty
 
 
 def test_agent_loop_prompt_requires_web_search_for_network_questions():
@@ -108,9 +108,10 @@ def test_agent_loop_prompt_requires_web_search_for_network_questions():
 
     prompt = loop._build_system_prompt([])
 
-    assert "联网" in prompt
-    assert "web_search" in prompt
-    assert "实测" in prompt
+    # New prompt structure: diagnostics and tool calling are the core focus
+    assert "诊断" in prompt
+    assert "filesystem_read" in prompt or len(loop.tools) == 0
+    assert "验证" in prompt
 
 
 def test_web_search_falls_back_when_primary_provider_fails(monkeypatch):

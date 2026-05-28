@@ -53,6 +53,10 @@ class RuntimeContext:
     session_manager: Any = None
     skill_loader: Any = None
     agent_loop: Any = None
+    brain_hooks: Any = None
+    context_compressor: Any = None
+    fact_extractor: Any = None
+    review_engine: Any = None
     last_activity_at: float = 0.0
     events: list[RuntimeEvent] = field(default_factory=list)
 

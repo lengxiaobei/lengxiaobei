@@ -39,3 +39,14 @@ Thumbs.db
 # Local config
 config/local/
 *.local.yaml
+
+# Node / Frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# Data
+data/
+
+# Tmp
+tmp/

@@ -1,4 +1,4 @@
-import { Activity, Cable, Database, MessageSquare, Network, Sparkles } from "lucide-react";
+import { Activity, Cable, Database, MessageSquare, Network, Sparkles, Route } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import type { ConsoleTab } from "../../stores/systemStore";
@@ -8,7 +8,8 @@ const tabs: Array<{ id: ConsoleTab; label: string; icon: LucideIcon }> = [
   { id: "chat", label: "对话", icon: MessageSquare },
   { id: "memory", label: "记忆", icon: Database },
   { id: "skills", label: "技能", icon: Sparkles },
-  { id: "autonomy", label: "自治", icon: Network }
+  { id: "autonomy", label: "自治", icon: Network },
+  { id: "trace", label: "轨迹", icon: Route }
 ];
 
 export function Sidebar({ children }: { children: ReactNode }) {

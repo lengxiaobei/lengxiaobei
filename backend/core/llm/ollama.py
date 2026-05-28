@@ -25,6 +25,25 @@ def local_fallback(prompt: str, reason: str | None = None) -> str:
 
 # ── Provider registry ───────────────────────────────────────────────
 
+_SHARED_CLIENT: httpx.AsyncClient | None = None
+
+
+def _get_client() -> httpx.AsyncClient:
+    """Return a shared ``httpx.AsyncClient``, creating one on first use."""
+    global _SHARED_CLIENT
+    if _SHARED_CLIENT is None or _SHARED_CLIENT.is_closed:
+        _SHARED_CLIENT = httpx.AsyncClient(timeout=httpx.Timeout(60))
+    return _SHARED_CLIENT
+
+
+async def close_client() -> None:
+    """Close the shared HTTP client. Call during application shutdown."""
+    global _SHARED_CLIENT
+    if _SHARED_CLIENT is not None and not _SHARED_CLIENT.is_closed:
+        await _SHARED_CLIENT.aclose()
+        _SHARED_CLIENT = None
+
+
 _PROVIDER_ALIASES: dict[str, str] = {
     "openai": "openai",
     "openai-compatible": "openai",
@@ -71,20 +90,20 @@ async def chat(prompt: str, system: str | None = None) -> str:
 async def _ollama_chat(prompt: str, system: str | None = None) -> str:
     settings = get_settings()
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(20)) as client:
-            payload = {
-                "model": settings.llm_model,
-                "messages": [
-                    *([{"role": "system", "content": system}] if system else []),
-                    {"role": "user", "content": prompt},
-                ],
-                "stream": False,
-            }
-            response = await client.post(
-                f"{settings.llm_base_url.rstrip('/')}/api/chat",
-                json=payload,
-            )
-            data = response.json()
+        client = _get_client()
+        payload = {
+            "model": settings.llm_model,
+            "messages": [
+                *([{"role": "system", "content": system}] if system else []),
+                {"role": "user", "content": prompt},
+            ],
+            "stream": False,
+        }
+        response = await client.post(
+            f"{settings.llm_base_url.rstrip('/')}/api/chat",
+            json=payload,
+        )
+        data = response.json()
         return str((data.get("message") or {}).get("content") or data.get("response") or "")
     except Exception:
         return local_fallback(prompt, reason="ollama unavailable")
@@ -97,18 +116,18 @@ async def _openai_compatible_chat(prompt: str, system: str | None = None) -> str
     if not settings.llm_api_key:
         return local_fallback(prompt, reason="missing api key")
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(60)) as client:
-            response = await client.post(
-                f"{settings.llm_base_url.rstrip('/')}/chat/completions",
-                json={
-                    "model": settings.llm_model,
-                    "messages": _messages(prompt, system),
-                    "temperature": 0.7,
-                    "max_tokens": 4096,
-                },
-                headers={"Authorization": f"Bearer {settings.llm_api_key}"},
-            )
-            data = response.json()
+        client = _get_client()
+        response = await client.post(
+            f"{settings.llm_base_url.rstrip('/')}/chat/completions",
+            json={
+                "model": settings.llm_model,
+                "messages": _messages(prompt, system),
+                "temperature": 0.7,
+                "max_tokens": 4096,
+            },
+            headers={"Authorization": f"Bearer {settings.llm_api_key}"},
+        )
+        data = response.json()
         choices = data.get("choices") or []
         if not choices:
             error_msg = data.get("error", {}).get("message", "") if isinstance(data.get("error"), dict) else ""
@@ -150,9 +169,9 @@ async def _anthropic_chat(prompt: str, system: str | None = None) -> str:
         body["system"] = system
 
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(60)) as client:
-            response = await client.post(url, json=body, headers=headers)
-            data = response.json()
+        client = _get_client()
+        response = await client.post(url, json=body, headers=headers)
+        data = response.json()
 
         # Anthropic response format
         content_blocks = data.get("content") or []

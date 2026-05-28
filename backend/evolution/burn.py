@@ -19,6 +19,12 @@ from pathlib import Path
 from typing import Any
 
 from backend.core.llm.ollama import chat as llm_chat
+from backend.evolution.evaluator import staged_quality
+
+# Default quality threshold for auto-approving generated skills.
+# Score is computed from staged_quality signals (0.0 = no signals pass, 1.0 = all pass).
+# Skills scoring below this threshold are queued for manual review instead of auto-approved.
+DEFAULT_QUALITY_THRESHOLD = 0.6
 
 
 def _estimate_tokens(text: str) -> int:
@@ -38,7 +44,7 @@ class BurnSession:
 class BurnEngine:
     """Intensive self-evolution — every token burned produces real change."""
 
-    def __init__(self, reflector: Any, skill_store: Any, dispatcher: Any, memory: Any, logger: Any, data_dir: Path):
+    def __init__(self, reflector: Any, skill_store: Any, dispatcher: Any, memory: Any, logger: Any, data_dir: Path, quality_threshold: float = DEFAULT_QUALITY_THRESHOLD):
         self.reflector = reflector
         self.skill_store = skill_store
         self.dispatcher = dispatcher
@@ -46,6 +52,7 @@ class BurnEngine:
         self.logger = logger
         self.data_dir = data_dir
         self.project_root = data_dir.parent
+        self.quality_threshold = quality_threshold
         self.active_session: BurnSession | None = None
         self.sessions: list[BurnSession] = []
         self.total_tokens: int = 0
@@ -213,23 +220,57 @@ class BurnEngine:
             if not parsed.get("name") or not parsed.get("steps"):
                 return {"ok": False, "summary": "未生成有效技能", "estimated_tokens": tokens}
 
+            # ── Quality gate: evaluate before auto-approving ─────────────
+            evaluation = self._evaluate_skill_quality(parsed)
+            score = evaluation["score"]
+            passed = evaluation["passed"]
+            reason = evaluation["reason"]
+            self.logger.info(
+                "burn skill quality gate: name=%s score=%.2f passed=%s — %s",
+                parsed.get("name"), score, passed, reason,
+            )
+
             name = self._safe_name(parsed["name"])
             steps = parsed["steps"]
 
-            # Save as approved directly
+            if not passed:
+                # Below threshold → save as "pending" for manual review, do NOT execute
+                skill = {
+                    "name": name, "trigger": parsed.get("trigger", "manual"),
+                    "steps": steps, "status": "pending",
+                    "reference_agent": "MiMo-Burn", "description": parsed.get("description", ""),
+                    "quality_score": score, "quality_reason": reason,
+                }
+                self.skill_store.save(skill)
+                self.skill_store.set_status(name, "pending")
+                summary = f"技能 {name} 已生成但未通过质量门控（{reason}），已加入审查队列"
+                self.memory.add_node(
+                    content=json.dumps(evaluation, ensure_ascii=False),
+                    node_type="burn_skill_queued",
+                    metadata={"skill": name, "score": score},
+                    summary=summary[:180],
+                )
+                return {
+                    "ok": True, "skill": name, "queued_for_review": True,
+                    "evaluation": evaluation, "summary": summary,
+                    "estimated_tokens": tokens,
+                }
+
+            # Above threshold → save as approved and execute immediately
             skill = {
                 "name": name, "trigger": parsed.get("trigger", "manual"),
                 "steps": steps, "status": "approved",
                 "reference_agent": "MiMo-Burn", "description": parsed.get("description", ""),
+                "quality_score": score, "quality_reason": reason,
             }
             self.skill_store.save(skill)
             self.skill_store.set_status(name, "approved")
 
             # Execute immediately
             exec_result = await self._execute_skill_steps(steps)
-            summary = f"技能 {name} 已生成、审批并执行：{'成功' if exec_result.get('ok') else '部分失败'}"
-            self.memory.add_node(content=json.dumps(exec_result, ensure_ascii=False), node_type="burn_skill_exec", metadata={"skill": name}, summary=summary[:180])
-            return {"ok": True, "skill": name, "executed": exec_result, "estimated_tokens": tokens}
+            summary = f"技能 {name} 通过质量门控（评分 {score:.0%}）已审批并执行：{'成功' if exec_result.get('ok') else '部分失败'}"
+            self.memory.add_node(content=json.dumps(exec_result, ensure_ascii=False), node_type="burn_skill_exec", metadata={"skill": name, "score": score}, summary=summary[:180])
+            return {"ok": True, "skill": name, "executed": exec_result, "evaluation": evaluation, "estimated_tokens": tokens}
         except Exception as exc:
             return {"ok": False, "summary": str(exc), "estimated_tokens": 0}
 
@@ -260,9 +301,17 @@ class BurnEngine:
         traces = self.dispatcher.recent_traces(limit=20)
         trace_text = json.dumps(traces, ensure_ascii=False, indent=2)
 
+        pending_list = [
+            {
+                "name": s.get("name"),
+                "trigger": s.get("trigger"),
+                "steps": str(s.get("body", s).get("steps", "")[:200]),
+            }
+            for s in pending[:8]
+        ]
         prompt = f"""审查以下 pending 技能，决定哪些可以自动审批执行。
 
-Pending 技能：{json.dumps([{{'name': s.get('name'), 'trigger': s.get('trigger'), 'steps': str(s.get('body', s).get('steps', '')[:200])}} for s in pending[:8]], ensure_ascii=False)}
+Pending 技能：{json.dumps(pending_list, ensure_ascii=False)}
 最近轨迹：{trace_text[:2000]}
 
 返回 JSON（只返回 JSON）：
@@ -350,6 +399,81 @@ Pending 技能：{json.dumps([{{'name': s.get('name'), 'trigger': s.get('trigger
             return {"ok": False, "summary": str(exc), "estimated_tokens": 0}
 
     # ── helpers ────────────────────────────────────────────────────────
+
+    def _evaluate_skill_quality(self, parsed: dict[str, Any]) -> dict[str, Any]:
+        """Evaluate a generated skill's quality using staged_quality signals.
+
+        Returns a dict with:
+          - signals: dict[str, bool]  (the 5 staged quality booleans)
+          - score: float in [0.0, 1.0]
+          - passed: bool  (True if score >= self.quality_threshold)
+          - reason: str   (human-readable explanation)
+        """
+        name = str(parsed.get("name", "")).strip()
+        steps = parsed.get("steps", [])
+        description = str(parsed.get("description", "")).strip()
+        trigger = str(parsed.get("trigger", "")).strip()
+
+        # ── Signal 1: syntax_ok — valid structure, all required fields present ──
+        syntax_ok = bool(name) and isinstance(steps, list) and len(steps) > 0
+
+        # ── Signal 2: function_exists — required fields are non-trivial ──
+        placeholder_names = {"技能名", "skill_name", "new_skill", "test", "untitled", ""}
+        function_exists = (
+            syntax_ok
+            and name.lower() not in placeholder_names
+            and len(name) >= 2
+        )
+
+        # ── Signal 3: callable_ok — every step references a non-empty tool name ──
+        callable_ok = function_exists and all(
+            bool(str(step.get("tool", "")).strip()) for step in steps
+        )
+
+        # ── Signal 4: semantic_ok — meaningful description and trigger ──
+        placeholder_descs = {"技能说明", "skill description", "description", ""}
+        semantic_ok = (
+            callable_ok
+            and description.lower() not in placeholder_descs
+            and len(description) >= 4
+            and len(trigger) >= 1
+        )
+
+        # ── Signal 5: integrated_ok — tools in steps are known to the dispatcher ──
+        known_tools: set[str] = set()
+        if hasattr(self.dispatcher, "list_tools"):
+            try:
+                known_tools = set(self.dispatcher.list_tools())
+            except Exception:
+                pass
+        if known_tools and callable_ok:
+            integrated_ok = all(
+                str(step.get("tool", "")).strip() in known_tools for step in steps
+            )
+        else:
+            # If we can't enumerate tools, give benefit of the doubt when callable_ok passes
+            integrated_ok = callable_ok
+
+        signals = staged_quality(
+            syntax_ok=syntax_ok,
+            function_exists=function_exists,
+            callable_ok=callable_ok,
+            semantic_ok=semantic_ok,
+            integrated_ok=integrated_ok,
+        )
+
+        passed_count = sum(1 for v in signals.values() if v)
+        score = passed_count / len(signals)  # len(signals) is always 5
+        passed = score >= self.quality_threshold
+
+        # Build a human-readable reason
+        failed = [k for k, v in signals.items() if not v]
+        if passed:
+            reason = f"质量评分 {score:.0%}（{passed_count}/5 信号通过），达到阈值 {self.quality_threshold:.0%}，自动审批"
+        else:
+            reason = f"质量评分 {score:.0%}（{passed_count}/5 信号通过），低于阈值 {self.quality_threshold:.0%}，加入审查队列。未通过：{', '.join(failed)}"
+
+        return {"signals": signals, "score": score, "passed": passed, "reason": reason}
 
     def _safe_json(self, text: str) -> dict[str, Any]:
         text = text.strip()

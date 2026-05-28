@@ -54,7 +54,19 @@ async def create_message(payload: ConversationInput, rt=Depends(runtime)) -> dic
         except Exception:
             pass
 
-    return {"status": "success", "result": {"text": result.get("text", "没有返回内容")}}
+    # Pass through structured data so the frontend can render
+    # thinking / tool calls / plan / iterations as distinct blocks.
+    return {
+        "status": "success",
+        "result": {
+            "text": result.get("text", "没有返回内容"),
+            "plan": result.get("plan"),
+            "tool_calls": result.get("tool_calls"),
+            "iterations": result.get("iterations"),
+            "elapsed_ms": result.get("elapsed_ms"),
+            "run_id": result.get("run_id"),
+        },
+    }
 
 
 @router.get("/search")

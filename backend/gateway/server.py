@@ -16,7 +16,7 @@ from typing import Any
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.api.routes import autonomy, channels, conversations, evolution, memory, mcp, llm_router, sessions, skills, system
+from backend.api.routes import autonomy, channels, conversations, evolution, memory, mcp, llm_router, sessions, skills, system, trace
 from backend.config import get_settings
 from backend.core.runtime_factory import build_runtime
 
@@ -40,8 +40,8 @@ def create_app() -> FastAPI:
             try:
                 from backend.tools.mcp_client import init_mcp
                 await init_mcp()
-            except Exception:
-                pass
+            except Exception as exc:
+                runtime.logger.warning("Failed to initialize MCP connections on startup: %s", exc, exc_info=True)
 
     @app.on_event("shutdown")
     async def _stop_scheduler() -> None:
@@ -64,6 +64,7 @@ def create_app() -> FastAPI:
     app.include_router(sessions.router, prefix="/api/sessions", tags=["sessions"])
     app.include_router(llm_router.router, prefix="/api/llm", tags=["llm-router"])
     app.include_router(mcp.router, prefix="/api/mcp", tags=["mcp"])
+    app.include_router(trace.router, prefix="/api/trace", tags=["trace"])
 
     @app.get("/")
     async def root() -> dict[str, Any]:
@@ -121,8 +122,8 @@ def create_app() -> FastAPI:
             from backend.api.routes.system import _build_status
             status = await _build_status(runtime)
             await ws.send_json({"type": "system.status", "payload": status})
-        except Exception:
-            pass
+        except Exception as exc:
+            runtime.logger.warning("Failed to push initial system status over WebSocket: %s", exc, exc_info=True)
         try:
             while True:
                 raw = await ws.receive_text()
@@ -140,17 +141,22 @@ def create_app() -> FastAPI:
                 runtime.touch_activity(source="websocket")
                 runtime.emit("agent.thinking", {"text": "planning", "channel": "websocket"})
                 await ws.send_json({"type": "agent.thinking", "payload": {"text": "planning"}})
-                result = await runtime.agent_loop.handle(text, channel="websocket")
+                # Route through Commander for proper intent detection
+                # (was bypassing Commander → agent_loop directly, causing mismatched replies)
+                result = await runtime.commander.handle_message(text, channel="websocket")
+                reply_text = result.get("text", "")
+                tool_calls = result.get("tool_calls") or []
+                recall = result.get("recall") or []
                 await ws.send_json(
                     {
                         "type": "chat.response",
                         "payload": {
-                            "text": result.reply,
-                            "tool_calls": result.tool_calls,
-                            "recall_count": result.recall_count,
-                            "goals_updated": result.goals_updated,
-                            "elapsed_ms": result.elapsed_ms,
-                            "runtime": "agent_loop",
+                            "text": reply_text,
+                            "tool_calls": tool_calls,
+                            "recall_count": len(recall),
+                            "goals_updated": False,
+                            "elapsed_ms": result.get("elapsed_ms", 0),
+                            "runtime": result.get("plan", {}).get("intent", "unknown"),
                         },
                     }
                 )

@@ -89,7 +89,7 @@ class AutonomyEngine:
         self._emit("autonomy.tick.started", event_payload)
         self.audit.write("tick.started", event_payload)
 
-        learning = self.learner.learn(goal.reference, limit=2)
+        learning = await self.learner.learn(goal.reference, limit=2)
         learning_nodes = [self._remember_learning(goal, item) for item in learning]
         roadmap = self._render_roadmap(goal, learning)
         write_result = await self.executor.write_roadmap(roadmap)
@@ -101,7 +101,7 @@ class AutonomyEngine:
         else:
             checks = await self.executor.run_checks(include_expensive=expensive_checks or force)
 
-        skill = self.evolver.draft_skill_for_goal(goal.as_dict())
+        skill = self.evolver.draft_skill_for_goal(goal.as_dict(), learning=learning)
         changelog = await self.executor.append_changelog(
             f"\n## {time.strftime('%Y-%m-%d %H:%M:%S')}\n"
             f"- reason: {reason}\n"

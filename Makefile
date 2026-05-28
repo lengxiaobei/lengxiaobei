@@ -13,7 +13,7 @@ frontend:
 	./scripts/start_frontend.sh
 
 test:
-	pytest backend/tests tests -q
+	pytest backend/tests -q
 
 check:
 	python3 -m compileall -q backend

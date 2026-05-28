@@ -71,16 +71,50 @@ class MemoryTree:
         if not query:
             return self.sqlite.list_memory_nodes(limit=limit)
 
-        # Try vector search first
+        keyword_results: list[dict[str, Any]] = []
+        vector_results: list[dict[str, Any]] = []
+
+        # Always run keyword search
+        try:
+            keyword_results = self.sqlite.search_memory_nodes(query, limit=limit)
+        except Exception:
+            logger.debug("Keyword search failed for query '%s'", query[:50], exc_info=True)
+
+        # Also run vector search if available
         if self._vector_store:
             try:
                 vector_results = self._vector_store.search(query, limit=limit)
-                if vector_results:
-                    return vector_results
             except Exception:
-                logger.debug("Vector search failed for query '%s', falling back to keyword", query[:50], exc_info=True)
+                logger.debug("Vector search failed for query '%s'", query[:50], exc_info=True)
 
-        return self.sqlite.search_memory_nodes(query, limit=limit)
+        # If only one source returned results, use it directly
+        if not vector_results:
+            return keyword_results
+        if not keyword_results:
+            return vector_results
+
+        # Blend: deduplicate by node id, boost vector scores by 1.5x
+        seen: set[str] = set()
+        merged: list[dict[str, Any]] = []
+
+        for node in keyword_results:
+            nid = str(node.get("id", ""))
+            if nid not in seen:
+                seen.add(nid)
+                merged.append(node)
+
+        for node in vector_results:
+            nid = str(node.get("id", ""))
+            if nid in seen:
+                continue
+            seen.add(nid)
+            score = node.get("score", 0)
+            if isinstance(score, (int, float)):
+                node = {**node, "score": score * 1.5}
+            merged.append(node)
+
+        merged.sort(key=lambda n: n.get("score", 0), reverse=True)
+        return merged[:limit]
 
     def children(self, parent_id: str, limit: int = 100) -> list[dict[str, Any]]:
         return self.sqlite.list_memory_nodes(limit=limit, parent_id=parent_id)

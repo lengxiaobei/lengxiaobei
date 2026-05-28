@@ -53,7 +53,8 @@ class Reflector:
             skipped_reason = "duplicate_trigger_within_7_days"
         elif self.skill_store:
             skill = draft_from_trace(name=f"auto_{node['id'][:8]}", trigger=topic, trace=successful[:8])
-            self.skill_store.save(skill)
+            source_run_id = successful[0].get("run_id") if successful else None
+            self.skill_store.save(skill, source_run_id=source_run_id)
         else:
             skipped_reason = "skill_store_unavailable"
         self.last_reflection = {

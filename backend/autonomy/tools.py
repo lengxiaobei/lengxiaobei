@@ -6,6 +6,7 @@ Registered with AgentLoop.register_tool(name, fn).
 
 from __future__ import annotations
 
+import base64
 import json
 import re
 import subprocess
@@ -125,15 +126,14 @@ async def web_search(args: dict[str, Any]) -> dict[str, Any]:
 
 
 def _http_get_text(url: str, timeout: int = 10) -> str:
-    req = urllib.request.Request(
-        url,
-        headers={
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-        },
+    """Use curl — inherits system proxy unlike urllib.request.urlopen."""
+    result = subprocess.run(
+        ["curl", "-s", "--max-time", str(timeout), "-L", url,
+         "-H", "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+         "-H", "Accept-Language: zh-CN,zh;q=0.9,en;q=0.8"],
+        capture_output=True, text=True,
     )
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return resp.read().decode("utf-8", errors="ignore")
+    return result.stdout
 
 
 def _search_gpto(query: str) -> list[str]:
@@ -153,14 +153,33 @@ def _search_gpto(query: str) -> list[str]:
 
 
 def _search_bing_html(query: str) -> list[str]:
+    """Search Bing HTML — extracts title, snippet and cite URL from each result block."""
     url = f"https://www.bing.com/search?q={urllib.parse.quote(query)}"
     html = _http_get_text(url)
     items: list[str] = []
-    for match in re.finditer(r'<li class="b_algo".*?<h2[^>]*>.*?<a[^>]*href="([^"]+)"[^>]*>(.*?)</a>', html, re.S):
-        link = unescape(match.group(1))
-        title = _strip_html(match.group(2))
-        if title:
-            items.append(f"{title[:120]} {link}".strip())
+    for block_m in re.finditer(r'<li class="b_algo"[^>]*>(.*?)</li>', html, re.S):
+        block = block_m.group(1)
+        # Title and Bing redirect link
+        a_m = re.search(r'<h2[^>]*>.*?<a[^>]+href="([^"]+)"[^>]*>(.*?)</a>', block, re.S)
+        if not a_m:
+            continue
+        title = _strip_html(a_m.group(2))
+        if not title:
+            continue
+        # Snippet paragraph
+        snippet_m = re.search(r'<p class="b_lineclamp[^"]*"[^>]*>(.*?)</p>', block, re.S)
+        snippet = _strip_html(snippet_m.group(1)) if snippet_m else ""
+        # Real URL from cite tag (more reliable than base64 decoding)
+        cite_m = re.search(r'<cite>(.*?)</cite>', block, re.S)
+        real_url = _strip_html(cite_m.group(1)) if cite_m else ""
+        # Format: "Title — snippet | url"
+        if snippet and real_url:
+            item = f"{title[:120]} — {snippet[:100]} | {real_url}"
+        elif real_url:
+            item = f"{title[:120]} | {real_url}"
+        else:
+            item = title[:120]
+        items.append(item)
         if len(items) >= 5:
             break
     return items
@@ -322,6 +341,72 @@ async def list_files(args: dict[str, Any]) -> dict[str, Any]:
 
 def register_all(agent_loop: Any) -> None:
     """Register all tools with the agent loop."""
+    # Reuse the agent loop's own memory backend instead of creating a new one per call
+    _agent_memory = getattr(agent_loop, "memory", None)
+
+    async def _memory_search(args: dict[str, Any]) -> dict[str, Any]:
+        query = args.get("query", "")
+        if not query:
+            return {"error": "query required"}
+        try:
+            if _agent_memory:
+                results = _agent_memory.search(query, limit=5)
+            else:
+                from backend.memory.sqlite_backend import SQLiteMemoryBackend
+                mem = SQLiteMemoryBackend()
+                results = mem.search(query, limit=5)
+            return {"ok": True, "results": results}
+        except Exception as exc:
+            return {"error": str(exc)}
+
+    async def _memory_recall(args: dict[str, Any]) -> dict[str, Any]:
+        limit = args.get("limit", 10)
+        try:
+            if _agent_memory:
+                recent = _agent_memory.list_recent(limit=limit)
+            else:
+                from backend.memory.sqlite_backend import SQLiteMemoryBackend
+                mem = SQLiteMemoryBackend()
+                recent = mem.list_recent(limit=limit)
+            return {"ok": True, "recent": recent}
+        except Exception as exc:
+            return {"error": str(exc)}
+
+    async def _system_status(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            if _agent_memory:
+                count = _agent_memory.count()
+            else:
+                from backend.memory.sqlite_backend import SQLiteMemoryBackend
+                mem = SQLiteMemoryBackend()
+                count = mem.count()
+            return {"ok": True, "memory_nodes": count, "session_uptime": "N/A"}
+        except Exception as exc:
+            return {"error": str(exc)}
+
+    async def _reflect(args: dict[str, Any]) -> dict[str, Any]:
+        topic = args.get("topic", "")
+        try:
+            if _agent_memory:
+                recent = _agent_memory.list_recent(limit=20)
+            else:
+                from backend.memory.sqlite_backend import SQLiteMemoryBackend
+                mem = SQLiteMemoryBackend()
+                recent = mem.list_recent(limit=20)
+            summary_text = "\n".join(f"[{n.get('node_type')}] {n.get('content','')[:200]}" for n in recent)
+            reflection = (
+                f"关于「{topic}」的反思：\n"
+                f"近期相关记忆 {len(recent)} 条：\n{summary_text[:1000]}\n"
+                "基于以上事实，给出诚实、有主见的反思，不要泛泛而谈。"
+            )
+            return {"ok": True, "reflection": reflection, "recent_count": len(recent)}
+        except Exception as exc:
+            return {"error": str(exc)}
+
+    # Goals tool — will be wired when autonomy engine is passed via register_goals_tool
+    async def _goals_stub(args: dict[str, Any]) -> dict[str, Any]:
+        return {"ok": True, "message": "目标追踪尚未接入，请使用自治页面查看目标状态。"}
+
     tools = [
         ("filesystem_write", filesystem_write, "filesystem", {"path": "str", "content": "str"}),
         ("filesystem_read", filesystem_read, "filesystem", {"path": "str"}),
@@ -331,16 +416,45 @@ def register_all(agent_loop: Any) -> None:
         ("code_search", code_search, "code", {"pattern": "str", "path": "str optional"}),
         ("list_files", list_files, "code", {"path": "str optional", "recursive": "bool optional"}),
         ("web_search", web_search, "web", {"query": "str"}),
-        ("memory_search", memory_search, "memory", {"query": "str"}),
-        ("memory_recall", memory_recall, "memory", {"limit": "int optional"}),
-        ("system_status", system_status, "runtime", {}),
+        ("memory_search", _memory_search, "memory", {"query": "str"}),
+        ("memory_recall", _memory_recall, "memory", {"limit": "int optional"}),
+        ("system_status", _system_status, "runtime", {}),
         ("code_quality", code_quality, "code", {}),
-        ("reflect", reflect, "reflection", {"topic": "str optional"}),
-        ("goals", goals, "planning", {}),
+        ("reflect", _reflect, "reflection", {"topic": "str optional"}),
+        ("goals", _goals_stub, "planning", {}),
         ("skill_list", skill_list, "skills", {}),
     ]
     for name, fn, category, schema in tools:
         agent_loop.register_tool(name, fn, category=category, input_schema=schema)
+
+
+def register_goals_tool(agent_loop: Any, autonomy: Any) -> None:
+    """Replace the goals stub with a real implementation backed by the AutonomyEngine."""
+
+    async def _goals(args: dict[str, Any]) -> dict[str, Any]:
+        action = args.get("action", "list")
+        try:
+            if action == "list":
+                goals = autonomy.state.get("goals", [])
+                return {
+                    "ok": True,
+                    "goals": goals,
+                    "run_count": autonomy.state.get("run_count", 0),
+                    "last_run_at": autonomy.state.get("last_run_at"),
+                }
+            if action == "status":
+                return {"ok": True, "status": autonomy.status()}
+            if action == "guards":
+                return {"ok": True, "guards": autonomy.guard_status()}
+            return {"ok": False, "error": f"unknown action: {action}. Use list, status, or guards."}
+        except Exception as exc:
+            return {"error": str(exc)}
+
+    # Override the stub registered in register_all
+    agent_loop.register_tool(
+        "goals", _goals, category="planning",
+        input_schema={"action": "str optional (list|status|guards)"},
+    )
 
 
 def register_dispatcher_tools(agent_loop: Any, dispatcher: Any, tool_registry: Any) -> None:

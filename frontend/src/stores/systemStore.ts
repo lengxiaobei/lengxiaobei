@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { DEFAULT_API_BASE } from "../api/client";
 
-export type ConsoleTab = "chat" | "memory" | "skills" | "autonomy";
+export type ConsoleTab = "chat" | "memory" | "skills" | "autonomy" | "trace";
 
 export type SystemStatus = {
   status: string;

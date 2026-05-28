@@ -243,7 +243,7 @@ class MemoryHooks:
 
 def _parse_timestamp(ts: str | float | int) -> float:
     """Parse a timestamp string to epoch seconds."""
-    if isinstance((int, float), type(ts)):
+    if isinstance(ts, (int, float)):
         return float(ts)
     try:
         import datetime
